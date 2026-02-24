@@ -14,6 +14,8 @@
 #include <recastnavigation/DetourNavMesh.h>         // 핵심 구조체 정의 포함
 #include <recastnavigation/DetourNavMeshBuilder.h>
 
+#include <boost/asio/strand.hpp>
+
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
 
@@ -51,8 +53,12 @@ struct PlayerInfo {
 
 std::unordered_map<std::string, PlayerInfo> g_playerMap;  // account_id -> PlayerInfo
 std::unordered_map<uint64_t, std::string> g_uidToAccount; // uid -> account_id
-std::mutex g_gameMutex;
 uint64_t g_uidCounter = 1; // Zone에 넣을 고유 번호 발급용
+
+//std::mutex g_gameMutex;
+// ★ [핵심 추가] 게임 로직을 순차적으로 처리할 글로벌 IO 컨텍스트와 Strand(작업 대기열)
+boost::asio::io_context g_io_context;
+boost::asio::io_context::strand g_game_strand(g_io_context);
 
 // ==========================================
 // 1. 전역 변수 및 디스패처 설정
@@ -140,54 +146,54 @@ private:
 };
 
 // ==========================================
-// 이동 패킷 핸들러 (Zone 로직 결합)
+// 이동 패킷 핸들러 (Strand 적용)
 // ==========================================
 void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
-    Protocol::GatewayGameMoveReq req;
-    if (req.ParseFromArray(payload, payloadSize)) {
-        std::string acc_id = req.account_id();
-        float new_x = req.x();
-        float new_y = req.y();
+    // 1. [병렬 처리 구간] I/O 스레드들이 락 없이 각자 파싱만 빠르게 수행합니다.
+    auto req = std::make_shared<Protocol::GatewayGameMoveReq>();
+    if (!req->ParseFromArray(payload, payloadSize)) return;
+
+    // 2. [직렬 큐잉 구간] 파싱된 데이터를 Strand 대기열에 던집니다. (람다 캡처 주의!)
+    boost::asio::post(g_game_strand, [session, req]() {
+        // --- 여기서부터는 무조건 순차 실행이 보장되므로 락(Lock)이 전혀 필요 없습니다! ---
+        std::string acc_id = req->account_id();
+        float new_x = req->x();
+        float new_y = req->y();
 
         std::vector<uint64_t> aoi_uids;
 
-        {
-            std::lock_guard<std::mutex> lock(g_gameMutex);
-
-            // 1. 처음 이동하는(입장한) 유저라면 Zone에 등록
-            if (g_playerMap.find(acc_id) == g_playerMap.end()) {
-                uint64_t new_uid = g_uidCounter++;
-                g_playerMap[acc_id] = { new_uid, new_x, new_y };
-                g_uidToAccount[new_uid] = acc_id;
-
-                g_zone->EnterZone(new_uid, new_x, new_y);
-                std::cout << "[GameServer] 유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")\n";
-            }
-            // 2. 이미 있는 유저라면 좌표 Update
-            else {
-                auto& info = g_playerMap[acc_id];
-                g_zone->UpdatePosition(info.uid, info.x, info.y, new_x, new_y);
-                info.x = new_x;
-                info.y = new_y;
-            }
-
-            // 3. 내 주변(AOI)에 있는 유저 목록 추출
-            aoi_uids = g_zone->GetPlayersInAOI(new_x, new_y);
+        // 1. 처음 이동하는(입장한) 유저라면 Zone에 등록
+        if (g_playerMap.find(acc_id) == g_playerMap.end()) {
+            uint64_t new_uid = g_uidCounter++;
+            g_playerMap[acc_id] = { new_uid, new_x, new_y };
+            g_uidToAccount[new_uid] = acc_id;
+            g_zone->EnterZone(new_uid, new_x, new_y);
+            std::cout << "[GameServer] 유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")\n";
         }
+        // 2. 이미 있는 유저라면 좌표 Update
+        else {
+            auto& info = g_playerMap[acc_id];
+            g_zone->UpdatePosition(info.uid, info.x, info.y, new_x, new_y);
+            info.x = new_x;
+            info.y = new_y;
+        }
+
+        // 3. 내 주변(AOI)에 있는 유저 목록 추출
+        aoi_uids = g_zone->GetPlayersInAOI(new_x, new_y);
+
 
         // 4. Gateway에게 "이 유저들에게만 뿌려!" 라고 패킷 전송
         Protocol::GameGatewayMoveRes s2s_res;
         s2s_res.set_account_id(acc_id);
         s2s_res.set_x(new_x);
         s2s_res.set_y(new_y);
-        s2s_res.set_z(req.z());
-        s2s_res.set_yaw(req.yaw());
+        s2s_res.set_z(req->z());
+        s2s_res.set_yaw(req->yaw());
 
         // [수정] 유저와 몬스터 숫자를 따로 세기 위한 변수
         int user_count = 0;
         int monster_count = 0;
 
-        std::lock_guard<std::mutex> lock(g_gameMutex);
         for (uint64_t target_uid : aoi_uids) {
             // 10000 미만은 유저, 이상은 몬스터로 분류하여 카운팅
             if (target_uid < 10000) {
@@ -208,18 +214,19 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
         session->Send(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
         // [수정] 뭉뚱그려진 로그를 유저와 몬스터로 분리해서 출력합니다.
         std::cout << "[GameServer] 유저(" << acc_id << ") 이동 완료 -> AOI 수신 대상: 유저 " << user_count << "명, 몬스터 " << monster_count << "마리\n";
-    }
+    });
 }
 
 // ==========================================
-// [GameServer] 유저 퇴장 처리 핸들러
+// [GameServer] 유저 퇴장 처리 핸들러(Strand 적용)
 // ==========================================
 void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
-    Protocol::GatewayGameLeaveReq req;
-    if (req.ParseFromArray(payload, payloadSize)) {
-        std::string acc_id = req.account_id();
+    auto req = std::make_shared<Protocol::GatewayGameLeaveReq>();
+    if (!req->ParseFromArray(payload, payloadSize)) return;
 
-        std::lock_guard<std::mutex> lock(g_gameMutex);
+    boost::asio::post(g_game_strand, [req]() {
+        // --- 락(Lock) 없이 안전하게 순차 삭제 ---
+        std::string acc_id = req->account_id();
 
         // 1. 해당 유저가 GameServer에 존재하는지 확인
         auto it = g_playerMap.find(acc_id);
@@ -237,7 +244,7 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
 
             std::cout << "[GameServer] 👻 유저(" << acc_id << ", UID:" << uid << ") 퇴장 완료. Zone에서 유령 데이터 삭제됨.\n";
         }
-    }
+    });
 }
 
 // ==========================================
@@ -292,15 +299,11 @@ int main() {
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ, Handle_GatewayGameMoveReq);
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, Handle_GatewayGameLeaveReq);
 
-    // TODO: 개발자님의 기존 초기화 코드 (Zone 생성, Monster 배치 등)가 들어갈 자리입니다.
-    // InitZone();
-    // InitMonsters();
-
     try {
-        boost::asio::io_context io_context;
+        //boost::asio::io_context io_context;
 
         // 1. S2S 서버 객체 생성 (포트: 9000)
-        GameNetworkServer server(io_context, 9000);
+        GameNetworkServer server(g_io_context, 9000);
         std::cout << "[System] 코어 게임 로직 서버 가동 (Port: 9000) Created by Jeong Shin Young\n";
 
         // 2. CPU 코어 개수에 맞춰 스레드 개수 설정
@@ -312,9 +315,9 @@ int main() {
         std::cout << "[System] 여러 스레드에서 io_context.run()을 호출하여 스레드 풀을 구성합니다...\n";
         std::vector<std::thread> threads;
         for (unsigned int i = 0; i < thread_count; ++i) {
-            threads.emplace_back([&io_context]() {
-                io_context.run();
-                });
+            threads.emplace_back([]() {
+                g_io_context.run();
+            });
         }
         std::cout << "[System] 스레드 풀 구성 완료.\n";
 
