@@ -1,0 +1,28 @@
+[시행착오 과정 리스트]
+ㆍ게임서버를 만들어주세요
+-> 어떤 구조의 게임서버인지? 게임서버는 단순히 한개인지? 이에 대한 이해도, 노하우 없으면 단순한 EchoServer 생성
+ㆍ기술스택 추천
+-> 언어, 네트워크, 직렬화, DB 등 설정해주는데 네트워크에서 멀티스레드에 대한 고려없음 (질문-프롬프트 시 보완 필요)
+ㆍ네트워크 Boost.Asio 라이브러리 NuGet 패키지 설치
+ㆍGameServer 빌드 시 콘솔에 한글깨짐 현상 수정 : 프로젝트 설정 - C/C++ 명령줄 - /utf-8 추가
+ㆍGoogle Protobuf 컴파일러 환경 세팅 및 배치 파일 작업
+ㆍ배치 파일 한글깨짐 현상 수정 : @echo off 바로 밑줄에 chcp 65001 > nul 추가
+ㆍcmd창에서 git 프로그램 설치: winget install --id Git.Git -e --source winget
+ㆍProtobuf 라이브러리 설치 과정
+  - C++용 Google Protobuf는 NuGet으로 설치하시는 것을 강력히 비추천(사실상 불가)
+  - 해결책으로 vcpkg (Modern C++ 표준)를 이용한 Protobuf 라이브러리 설치
+ㆍCommon (Protocol/Protobuf) 프로젝트 빌드 에러 수정 : 미리 컴파일된 헤더 사용 안 함
+ㆍGameServer에 Sector 및 Zone 클래스 (AOI 시스템) 추가
+ㆍ헤더파일 cpp 파일 분리 (헤더파일 수정 시 전체 빌드로 생산성 저하)
+ㆍDummyClient <-> LoginServer 연결 테스트
+ㆍGoogle Protobuf (login packet) 변경 작업
+ㆍGoogle Protobuf 패킷 헤더 구조체 설계 및 서버 수신 버퍼 처리 로직 작업
+ㆍ패킷 핸들러(Packet Handler) 및 디스패처(Dispatcher) 설계
+ㆍLoginServer <-> WorldServer S2S 작업 (WorldServer에서 토큰 발급 - 인증 서버 역할)
+ㆍLoginServer <-> GatewayServer S2S 작업 (Gateway에서 채팅 기능, 브로드캐스팅 테스트)
+ㆍGatewayServer <-> GameServer 작업
+ㆍ이동 패킷 구현 (LoginServer <-> GatewayServer <-> GameServer)
+ㆍ존(Zone) 방식 서버 구조 이해도를 위한 내 주변 시야(AOI)에 있는 사람에게만 이동 패킷 수정 (여러개 DummyClient 실행 후 이동하면서 게임서버 로그 확인 가능)
+ㆍNavMesh 기반 A 길찾기 및 몬스터 AI 상태 머신(FSM) 시스템 구현
+ㆍRecastNavigation 연동을 통한 길찾기 및 몬스터 추적/복귀 AI 구축
+ㆍ각종 Warning(경고) 제거
