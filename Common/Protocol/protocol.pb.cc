@@ -426,6 +426,38 @@ struct GameGatewayMoveResDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 GameGatewayMoveResDefaultTypeInternal _GameGatewayMoveRes_default_instance_;
 
+inline constexpr GameGatewayAttackRes::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        target_account_ids_{},
+        target_account_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        attacker_uid_{::uint64_t{0u}},
+        target_uid_{::uint64_t{0u}},
+        damage_{0},
+        target_remain_hp_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR GameGatewayAttackRes::GameGatewayAttackRes(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(GameGatewayAttackRes_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct GameGatewayAttackResDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR GameGatewayAttackResDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~GameGatewayAttackResDefaultTypeInternal() {}
+  union {
+    GameGatewayAttackRes _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 GameGatewayAttackResDefaultTypeInternal _GameGatewayAttackRes_default_instance_;
+
 inline constexpr ChatRes::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -482,6 +514,61 @@ struct ChatReqDefaultTypeInternal {
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 ChatReqDefaultTypeInternal _ChatReq_default_instance_;
+
+inline constexpr AttackRes::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        target_account_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        attacker_uid_{::uint64_t{0u}},
+        damage_{0},
+        target_remain_hp_{0} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR AttackRes::AttackRes(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(AttackRes_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct AttackResDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR AttackResDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~AttackResDefaultTypeInternal() {}
+  union {
+    AttackRes _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 AttackResDefaultTypeInternal _AttackRes_default_instance_;
+
+inline constexpr AttackReq::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        target_uid_{::uint64_t{0u}} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR AttackReq::AttackReq(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(AttackReq_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct AttackReqDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR AttackReqDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~AttackReqDefaultTypeInternal() {}
+  union {
+    AttackReq _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 AttackReqDefaultTypeInternal _AttackReq_default_instance_;
 }  // namespace Protocol
 static const ::_pb::EnumDescriptor* PROTOBUF_NONNULL
     file_level_enum_descriptors_protocol_2eproto[1];
@@ -570,6 +657,22 @@ const ::uint32_t
         3,
         4,
         0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackReq, _impl_._has_bits_),
+        4, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackReq, _impl_.target_uid_),
+        0,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackRes, _impl_._has_bits_),
+        7, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackRes, _impl_.attacker_uid_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackRes, _impl_.target_account_id_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackRes, _impl_.damage_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::AttackRes, _impl_.target_remain_hp_),
+        1,
+        0,
+        2,
+        3,
+        0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::Protocol::LoginWorldSelectReq, _impl_._has_bits_),
         5, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::Protocol::LoginWorldSelectReq, _impl_.account_id_),
@@ -622,6 +725,21 @@ const ::uint32_t
         4, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::Protocol::GatewayGameLeaveReq, _impl_.account_id_),
         0,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_._has_bits_),
+        9, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.attacker_uid_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.target_uid_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.damage_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.target_remain_hp_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.target_account_ids_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GameGatewayAttackRes, _impl_.target_account_id_),
+        2,
+        3,
+        4,
+        5,
+        0,
+        1,
 };
 
 static const ::_pbi::MigrationSchema
@@ -637,11 +755,14 @@ static const ::_pbi::MigrationSchema
         {48, sizeof(::Protocol::ChatRes)},
         {55, sizeof(::Protocol::MoveReq)},
         {66, sizeof(::Protocol::MoveRes)},
-        {79, sizeof(::Protocol::LoginWorldSelectReq)},
-        {86, sizeof(::Protocol::WorldLoginSelectRes)},
-        {99, sizeof(::Protocol::GatewayGameMoveReq)},
-        {112, sizeof(::Protocol::GameGatewayMoveRes)},
-        {127, sizeof(::Protocol::GatewayGameLeaveReq)},
+        {79, sizeof(::Protocol::AttackReq)},
+        {84, sizeof(::Protocol::AttackRes)},
+        {95, sizeof(::Protocol::LoginWorldSelectReq)},
+        {102, sizeof(::Protocol::WorldLoginSelectRes)},
+        {115, sizeof(::Protocol::GatewayGameMoveReq)},
+        {128, sizeof(::Protocol::GameGatewayMoveRes)},
+        {143, sizeof(::Protocol::GatewayGameLeaveReq)},
+        {148, sizeof(::Protocol::GameGatewayAttackRes)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::Protocol::_Heartbeat_default_instance_._instance,
@@ -655,11 +776,14 @@ static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::Protocol::_ChatRes_default_instance_._instance,
     &::Protocol::_MoveReq_default_instance_._instance,
     &::Protocol::_MoveRes_default_instance_._instance,
+    &::Protocol::_AttackReq_default_instance_._instance,
+    &::Protocol::_AttackRes_default_instance_._instance,
     &::Protocol::_LoginWorldSelectReq_default_instance_._instance,
     &::Protocol::_WorldLoginSelectRes_default_instance_._instance,
     &::Protocol::_GatewayGameMoveReq_default_instance_._instance,
     &::Protocol::_GameGatewayMoveRes_default_instance_._instance,
     &::Protocol::_GatewayGameLeaveReq_default_instance_._instance,
+    &::Protocol::_GameGatewayAttackRes_default_instance_._instance,
 };
 const char descriptor_table_protodef_protocol_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
@@ -677,44 +801,55 @@ const char descriptor_table_protodef_protocol_2eproto[] ABSL_ATTRIBUTE_SECTION_V
     "eq\022\t\n\001x\030\001 \001(\002\022\t\n\001y\030\002 \001(\002\022\t\n\001z\030\003 \001(\002\022\013\n\003y"
     "aw\030\004 \001(\002\"K\n\007MoveRes\022\022\n\naccount_id\030\001 \001(\t\022"
     "\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030"
-    "\005 \001(\002\";\n\023LoginWorldSelectReq\022\022\n\naccount_"
-    "id\030\001 \001(\t\022\020\n\010world_id\030\002 \001(\005\"{\n\023WorldLogin"
-    "SelectRes\022\022\n\naccount_id\030\001 \001(\t\022\017\n\007success"
-    "\030\002 \001(\010\022\022\n\ngateway_ip\030\003 \001(\t\022\024\n\014gateway_po"
-    "rt\030\004 \001(\005\022\025\n\rsession_token\030\005 \001(\t\"V\n\022Gatew"
-    "ayGameMoveReq\022\022\n\naccount_id\030\001 \001(\t\022\t\n\001x\030\002"
-    " \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\""
-    "r\n\022GameGatewayMoveRes\022\022\n\naccount_id\030\001 \001("
-    "\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003ya"
-    "w\030\005 \001(\002\022\032\n\022target_account_ids\030\006 \003(\t\")\n\023G"
-    "atewayGameLeaveReq\022\022\n\naccount_id\030\001 \001(\t*\271"
-    "\004\n\010PacketID\022\017\n\013PKT_UNKNOWN\020\000\022\036\n\032PKT_CLIE"
-    "NT_LOGIN_LOGIN_REQ\020\001\022\036\n\032PKT_LOGIN_CLIENT"
-    "_LOGIN_RES\020\002\022\037\n\033PKT_CLIENT_SERVER_HEARTB"
-    "EAT\020\007\022%\n!PKT_CLIENT_LOGIN_WORLD_SELECT_R"
-    "EQ\020\n\022%\n!PKT_LOGIN_CLIENT_WORLD_SELECT_RE"
-    "S\020\013\022\"\n\036PKT_CLIENT_GATEWAY_CONNECT_REQ\020\024\022"
-    "\"\n\036PKT_GATEWAY_CLIENT_CONNECT_RES\020\025\022\037\n\033P"
-    "KT_CLIENT_GATEWAY_CHAT_REQ\020\026\022\037\n\033PKT_GATE"
-    "WAY_CLIENT_CHAT_RES\020\027\022\037\n\033PKT_CLIENT_GATE"
-    "WAY_MOVE_REQ\020\030\022\037\n\033PKT_GATEWAY_CLIENT_MOV"
-    "E_RES\020\031\022\037\n\032PKT_LOGIN_WORLD_SELECT_REQ\020\362\007"
-    "\022\037\n\032PKT_WORLD_LOGIN_SELECT_RES\020\363\007\022\036\n\031PKT"
-    "_GATEWAY_GAME_MOVE_REQ\020\200\010\022\036\n\031PKT_GAME_GA"
-    "TEWAY_MOVE_RES\020\201\010\022\037\n\032PKT_GATEWAY_GAME_LE"
-    "AVE_REQ\020\202\010b\006proto3"
+    "\005 \001(\002\"\037\n\tAttackReq\022\022\n\ntarget_uid\030\001 \001(\004\"f"
+    "\n\tAttackRes\022\024\n\014attacker_uid\030\001 \001(\004\022\031\n\021tar"
+    "get_account_id\030\002 \001(\t\022\016\n\006damage\030\003 \001(\005\022\030\n\020"
+    "target_remain_hp\030\004 \001(\005\";\n\023LoginWorldSele"
+    "ctReq\022\022\n\naccount_id\030\001 \001(\t\022\020\n\010world_id\030\002 "
+    "\001(\005\"{\n\023WorldLoginSelectRes\022\022\n\naccount_id"
+    "\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\022\n\ngateway_ip\030\003 "
+    "\001(\t\022\024\n\014gateway_port\030\004 \001(\005\022\025\n\rsession_tok"
+    "en\030\005 \001(\t\"V\n\022GatewayGameMoveReq\022\022\n\naccoun"
+    "t_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 "
+    "\001(\002\022\013\n\003yaw\030\005 \001(\002\"r\n\022GameGatewayMoveRes\022\022"
+    "\n\naccount_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002"
+    "\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\022\032\n\022target_accou"
+    "nt_ids\030\006 \003(\t\")\n\023GatewayGameLeaveReq\022\022\n\na"
+    "ccount_id\030\001 \001(\t\"\241\001\n\024GameGatewayAttackRes"
+    "\022\024\n\014attacker_uid\030\001 \001(\004\022\022\n\ntarget_uid\030\002 \001"
+    "(\004\022\016\n\006damage\030\003 \001(\005\022\030\n\020target_remain_hp\030\004"
+    " \001(\005\022\032\n\022target_account_ids\030\005 \003(\t\022\031\n\021targ"
+    "et_account_id\030\006 \001(\t*\303\005\n\010PacketID\022\017\n\013PKT_"
+    "UNKNOWN\020\000\022\036\n\032PKT_CLIENT_LOGIN_LOGIN_REQ\020"
+    "\001\022\036\n\032PKT_LOGIN_CLIENT_LOGIN_RES\020\002\022\037\n\033PKT"
+    "_CLIENT_SERVER_HEARTBEAT\020\007\022%\n!PKT_CLIENT"
+    "_LOGIN_WORLD_SELECT_REQ\020\n\022%\n!PKT_LOGIN_C"
+    "LIENT_WORLD_SELECT_RES\020\013\022\"\n\036PKT_CLIENT_G"
+    "ATEWAY_CONNECT_REQ\020\024\022\"\n\036PKT_GATEWAY_CLIE"
+    "NT_CONNECT_RES\020\025\022\037\n\033PKT_CLIENT_GATEWAY_C"
+    "HAT_REQ\020\026\022\037\n\033PKT_GATEWAY_CLIENT_CHAT_RES"
+    "\020\027\022\037\n\033PKT_CLIENT_GATEWAY_MOVE_REQ\020\030\022\037\n\033P"
+    "KT_GATEWAY_CLIENT_MOVE_RES\020\031\022!\n\035PKT_CLIE"
+    "NT_GATEWAY_ATTACK_REQ\020\032\022!\n\035PKT_GATEWAY_C"
+    "LIENT_ATTACK_RES\020\033\022\037\n\032PKT_LOGIN_WORLD_SE"
+    "LECT_REQ\020\362\007\022\037\n\032PKT_WORLD_LOGIN_SELECT_RE"
+    "S\020\363\007\022\036\n\031PKT_GATEWAY_GAME_MOVE_REQ\020\200\010\022\036\n\031"
+    "PKT_GAME_GATEWAY_MOVE_RES\020\201\010\022\037\n\032PKT_GATE"
+    "WAY_GAME_LEAVE_REQ\020\202\010\022 \n\033PKT_GATEWAY_GAM"
+    "E_ATTACK_REQ\020\203\010\022 \n\033PKT_GAME_GATEWAY_ATTA"
+    "CK_RES\020\204\010b\006proto3"
 };
 static ::absl::once_flag descriptor_table_protocol_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_protocol_2eproto = {
     false,
     false,
-    1578,
+    2017,
     descriptor_table_protodef_protocol_2eproto,
     "protocol.proto",
     &descriptor_table_protocol_2eproto_once,
     nullptr,
     0,
-    16,
+    19,
     schemas,
     file_default_instances,
     TableStruct_protocol_2eproto::offsets,
@@ -727,7 +862,7 @@ const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL PacketID_descriptor()
   return file_level_enum_descriptors_protocol_2eproto[0];
 }
 PROTOBUF_CONSTINIT const uint32_t PacketID_internal_data_[] = {
-    196608u, 327712u, 8257936u, 1025u, 1011u, 1026u, 1010u, 1024u, };
+    196608u, 458784u, 33423760u, 1025u, 1011u, 1027u, 1010u, 1024u, 1026u, 1028u, };
 // ===================================================================
 
 class Heartbeat::_Internal {
@@ -4006,6 +4141,637 @@ void MoveRes::InternalSwap(MoveRes* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
 }
 // ===================================================================
 
+class AttackReq::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<AttackReq>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(AttackReq, _impl_._has_bits_);
+};
+
+AttackReq::AttackReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, AttackReq_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.AttackReq)
+}
+AttackReq::AttackReq(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const AttackReq& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, AttackReq_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(from._impl_) {
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+PROTOBUF_NDEBUG_INLINE AttackReq::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0} {}
+
+inline void AttackReq::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  _impl_.target_uid_ = {};
+}
+AttackReq::~AttackReq() {
+  // @@protoc_insertion_point(destructor:Protocol.AttackReq)
+  SharedDtor(*this);
+}
+inline void AttackReq::SharedDtor(MessageLite& self) {
+  AttackReq& this_ = static_cast<AttackReq&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL AttackReq::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) AttackReq(arena);
+}
+constexpr auto AttackReq::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(AttackReq),
+                                            alignof(AttackReq));
+}
+constexpr auto AttackReq::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_AttackReq_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &AttackReq::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<AttackReq>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &AttackReq::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<AttackReq>(), &AttackReq::ByteSizeLong,
+              &AttackReq::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(AttackReq, _impl_._cached_size_),
+          false,
+      },
+      &AttackReq::kDescriptorMethods,
+      &descriptor_table_protocol_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull AttackReq_class_data_ =
+        AttackReq::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+AttackReq::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&AttackReq_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(AttackReq_class_data_.tc_table);
+  return AttackReq_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<0, 1, 0, 0, 2>
+AttackReq::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(AttackReq, _impl_._has_bits_),
+    0, // no _extensions_
+    1, 0,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967294,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    1,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    AttackReq_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::Protocol::AttackReq>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    // uint64 target_uid = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(AttackReq, _impl_.target_uid_), 0>(),
+     {8, 0, 0,
+      PROTOBUF_FIELD_OFFSET(AttackReq, _impl_.target_uid_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // uint64 target_uid = 1;
+    {PROTOBUF_FIELD_OFFSET(AttackReq, _impl_.target_uid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+PROTOBUF_NOINLINE void AttackReq::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.AttackReq)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.target_uid_ = ::uint64_t{0u};
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL AttackReq::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const AttackReq& this_ = static_cast<const AttackReq&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL AttackReq::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const AttackReq& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.AttackReq)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // uint64 target_uid = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (this_._internal_target_uid() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          1, this_._internal_target_uid(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.AttackReq)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t AttackReq::ByteSizeLong(const MessageLite& base) {
+  const AttackReq& this_ = static_cast<const AttackReq&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t AttackReq::ByteSizeLong() const {
+  const AttackReq& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:Protocol.AttackReq)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+   {
+    // uint64 target_uid = 1;
+    cached_has_bits = this_._impl_._has_bits_[0];
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (this_._internal_target_uid() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_target_uid());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void AttackReq::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<AttackReq*>(&to_msg);
+  auto& from = static_cast<const AttackReq&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.AttackReq)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (from._internal_target_uid() != 0) {
+      _this->_impl_.target_uid_ = from._impl_.target_uid_;
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void AttackReq::CopyFrom(const AttackReq& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:Protocol.AttackReq)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void AttackReq::InternalSwap(AttackReq* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  swap(_impl_.target_uid_, other->_impl_.target_uid_);
+}
+
+::google::protobuf::Metadata AttackReq::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class AttackRes::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<AttackRes>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(AttackRes, _impl_._has_bits_);
+};
+
+AttackRes::AttackRes(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, AttackRes_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.AttackRes)
+}
+PROTOBUF_NDEBUG_INLINE AttackRes::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::Protocol::AttackRes& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        target_account_id_(arena, from.target_account_id_) {}
+
+AttackRes::AttackRes(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const AttackRes& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, AttackRes_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  AttackRes* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::memcpy(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, attacker_uid_),
+           reinterpret_cast<const char*>(&from._impl_) +
+               offsetof(Impl_, attacker_uid_),
+           offsetof(Impl_, target_remain_hp_) -
+               offsetof(Impl_, attacker_uid_) +
+               sizeof(Impl_::target_remain_hp_));
+
+  // @@protoc_insertion_point(copy_constructor:Protocol.AttackRes)
+}
+PROTOBUF_NDEBUG_INLINE AttackRes::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        target_account_id_(arena) {}
+
+inline void AttackRes::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, attacker_uid_),
+           0,
+           offsetof(Impl_, target_remain_hp_) -
+               offsetof(Impl_, attacker_uid_) +
+               sizeof(Impl_::target_remain_hp_));
+}
+AttackRes::~AttackRes() {
+  // @@protoc_insertion_point(destructor:Protocol.AttackRes)
+  SharedDtor(*this);
+}
+inline void AttackRes::SharedDtor(MessageLite& self) {
+  AttackRes& this_ = static_cast<AttackRes&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.target_account_id_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL AttackRes::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) AttackRes(arena);
+}
+constexpr auto AttackRes::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(AttackRes),
+                                            alignof(AttackRes));
+}
+constexpr auto AttackRes::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_AttackRes_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &AttackRes::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<AttackRes>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &AttackRes::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<AttackRes>(), &AttackRes::ByteSizeLong,
+              &AttackRes::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(AttackRes, _impl_._cached_size_),
+          false,
+      },
+      &AttackRes::kDescriptorMethods,
+      &descriptor_table_protocol_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull AttackRes_class_data_ =
+        AttackRes::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+AttackRes::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&AttackRes_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(AttackRes_class_data_.tc_table);
+  return AttackRes_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 4, 0, 44, 2>
+AttackRes::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(AttackRes, _impl_._has_bits_),
+    0, // no _extensions_
+    4, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967280,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    4,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    AttackRes_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::Protocol::AttackRes>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    // int32 target_remain_hp = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(AttackRes, _impl_.target_remain_hp_), 3>(),
+     {32, 3, 0,
+      PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.target_remain_hp_)}},
+    // uint64 attacker_uid = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(AttackRes, _impl_.attacker_uid_), 1>(),
+     {8, 1, 0,
+      PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.attacker_uid_)}},
+    // string target_account_id = 2;
+    {::_pbi::TcParser::FastUS1,
+     {18, 0, 0,
+      PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.target_account_id_)}},
+    // int32 damage = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(AttackRes, _impl_.damage_), 2>(),
+     {24, 2, 0,
+      PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.damage_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // uint64 attacker_uid = 1;
+    {PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.attacker_uid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // string target_account_id = 2;
+    {PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.target_account_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int32 damage = 3;
+    {PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.damage_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // int32 target_remain_hp = 4;
+    {PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.target_remain_hp_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+  }},
+  // no aux_entries
+  {{
+    "\22\0\21\0\0\0\0\0"
+    "Protocol.AttackRes"
+    "target_account_id"
+  }},
+};
+PROTOBUF_NOINLINE void AttackRes::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.AttackRes)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    _impl_.target_account_id_.ClearNonDefaultToEmpty();
+  }
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000eU)) {
+    ::memset(&_impl_.attacker_uid_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.target_remain_hp_) -
+        reinterpret_cast<char*>(&_impl_.attacker_uid_)) + sizeof(_impl_.target_remain_hp_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL AttackRes::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const AttackRes& this_ = static_cast<const AttackRes&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL AttackRes::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const AttackRes& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.AttackRes)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // uint64 attacker_uid = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (this_._internal_attacker_uid() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          1, this_._internal_attacker_uid(), target);
+    }
+  }
+
+  // string target_account_id = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (!this_._internal_target_account_id().empty()) {
+      const ::std::string& _s = this_._internal_target_account_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "Protocol.AttackRes.target_account_id");
+      target = stream->WriteStringMaybeAliased(2, _s, target);
+    }
+  }
+
+  // int32 damage = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_damage() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<3>(
+              stream, this_._internal_damage(), target);
+    }
+  }
+
+  // int32 target_remain_hp = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (this_._internal_target_remain_hp() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<4>(
+              stream, this_._internal_target_remain_hp(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.AttackRes)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t AttackRes::ByteSizeLong(const MessageLite& base) {
+  const AttackRes& this_ = static_cast<const AttackRes&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t AttackRes::ByteSizeLong() const {
+  const AttackRes& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:Protocol.AttackRes)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
+    // string target_account_id = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!this_._internal_target_account_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_target_account_id());
+      }
+    }
+    // uint64 attacker_uid = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (this_._internal_attacker_uid() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_attacker_uid());
+      }
+    }
+    // int32 damage = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_damage() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_damage());
+      }
+    }
+    // int32 target_remain_hp = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (this_._internal_target_remain_hp() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_target_remain_hp());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void AttackRes::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<AttackRes*>(&to_msg);
+  auto& from = static_cast<const AttackRes&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.AttackRes)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!from._internal_target_account_id().empty()) {
+        _this->_internal_set_target_account_id(from._internal_target_account_id());
+      } else {
+        if (_this->_impl_.target_account_id_.IsDefault()) {
+          _this->_internal_set_target_account_id("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (from._internal_attacker_uid() != 0) {
+        _this->_impl_.attacker_uid_ = from._impl_.attacker_uid_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_damage() != 0) {
+        _this->_impl_.damage_ = from._impl_.damage_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (from._internal_target_remain_hp() != 0) {
+        _this->_impl_.target_remain_hp_ = from._impl_.target_remain_hp_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void AttackRes::CopyFrom(const AttackRes& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:Protocol.AttackRes)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void AttackRes::InternalSwap(AttackRes* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.target_account_id_, &other->_impl_.target_account_id_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.target_remain_hp_)
+      + sizeof(AttackRes::_impl_.target_remain_hp_)
+      - PROTOBUF_FIELD_OFFSET(AttackRes, _impl_.attacker_uid_)>(
+          reinterpret_cast<char*>(&_impl_.attacker_uid_),
+          reinterpret_cast<char*>(&other->_impl_.attacker_uid_));
+}
+
+::google::protobuf::Metadata AttackRes::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
 class LoginWorldSelectReq::_Internal {
  public:
   using HasBits =
@@ -5895,6 +6661,470 @@ void GatewayGameLeaveReq::InternalSwap(GatewayGameLeaveReq* PROTOBUF_RESTRICT PR
 }
 
 ::google::protobuf::Metadata GatewayGameLeaveReq::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class GameGatewayAttackRes::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<GameGatewayAttackRes>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_._has_bits_);
+};
+
+GameGatewayAttackRes::GameGatewayAttackRes(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, GameGatewayAttackRes_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.GameGatewayAttackRes)
+}
+PROTOBUF_NDEBUG_INLINE GameGatewayAttackRes::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::Protocol::GameGatewayAttackRes& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        target_account_ids_{visibility, arena, from.target_account_ids_},
+        target_account_id_(arena, from.target_account_id_) {}
+
+GameGatewayAttackRes::GameGatewayAttackRes(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const GameGatewayAttackRes& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, GameGatewayAttackRes_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  GameGatewayAttackRes* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::memcpy(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, attacker_uid_),
+           reinterpret_cast<const char*>(&from._impl_) +
+               offsetof(Impl_, attacker_uid_),
+           offsetof(Impl_, target_remain_hp_) -
+               offsetof(Impl_, attacker_uid_) +
+               sizeof(Impl_::target_remain_hp_));
+
+  // @@protoc_insertion_point(copy_constructor:Protocol.GameGatewayAttackRes)
+}
+PROTOBUF_NDEBUG_INLINE GameGatewayAttackRes::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        target_account_ids_{visibility, arena},
+        target_account_id_(arena) {}
+
+inline void GameGatewayAttackRes::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, attacker_uid_),
+           0,
+           offsetof(Impl_, target_remain_hp_) -
+               offsetof(Impl_, attacker_uid_) +
+               sizeof(Impl_::target_remain_hp_));
+}
+GameGatewayAttackRes::~GameGatewayAttackRes() {
+  // @@protoc_insertion_point(destructor:Protocol.GameGatewayAttackRes)
+  SharedDtor(*this);
+}
+inline void GameGatewayAttackRes::SharedDtor(MessageLite& self) {
+  GameGatewayAttackRes& this_ = static_cast<GameGatewayAttackRes&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.target_account_id_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL GameGatewayAttackRes::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) GameGatewayAttackRes(arena);
+}
+constexpr auto GameGatewayAttackRes::InternalNewImpl_() {
+  constexpr auto arena_bits = ::google::protobuf::internal::EncodePlacementArenaOffsets({
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_account_ids_) +
+          decltype(GameGatewayAttackRes::_impl_.target_account_ids_)::
+              InternalGetArenaOffset(
+                  ::google::protobuf::Message::internal_visibility()),
+  });
+  if (arena_bits.has_value()) {
+    return ::google::protobuf::internal::MessageCreator::CopyInit(
+        sizeof(GameGatewayAttackRes), alignof(GameGatewayAttackRes), *arena_bits);
+  } else {
+    return ::google::protobuf::internal::MessageCreator(&GameGatewayAttackRes::PlacementNew_,
+                                 sizeof(GameGatewayAttackRes),
+                                 alignof(GameGatewayAttackRes));
+  }
+}
+constexpr auto GameGatewayAttackRes::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_GameGatewayAttackRes_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &GameGatewayAttackRes::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<GameGatewayAttackRes>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &GameGatewayAttackRes::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<GameGatewayAttackRes>(), &GameGatewayAttackRes::ByteSizeLong,
+              &GameGatewayAttackRes::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_._cached_size_),
+          false,
+      },
+      &GameGatewayAttackRes::kDescriptorMethods,
+      &descriptor_table_protocol_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull GameGatewayAttackRes_class_data_ =
+        GameGatewayAttackRes::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+GameGatewayAttackRes::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&GameGatewayAttackRes_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(GameGatewayAttackRes_class_data_.tc_table);
+  return GameGatewayAttackRes_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<3, 6, 0, 73, 2>
+GameGatewayAttackRes::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_._has_bits_),
+    0, // no _extensions_
+    6, 56,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967232,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    6,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    GameGatewayAttackRes_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::Protocol::GameGatewayAttackRes>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // uint64 attacker_uid = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(GameGatewayAttackRes, _impl_.attacker_uid_), 2>(),
+     {8, 2, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.attacker_uid_)}},
+    // uint64 target_uid = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(GameGatewayAttackRes, _impl_.target_uid_), 3>(),
+     {16, 3, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_uid_)}},
+    // int32 damage = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(GameGatewayAttackRes, _impl_.damage_), 4>(),
+     {24, 4, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.damage_)}},
+    // int32 target_remain_hp = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(GameGatewayAttackRes, _impl_.target_remain_hp_), 5>(),
+     {32, 5, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_remain_hp_)}},
+    // repeated string target_account_ids = 5;
+    {::_pbi::TcParser::FastUR1,
+     {42, 0, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_account_ids_)}},
+    // string target_account_id = 6;
+    {::_pbi::TcParser::FastUS1,
+     {50, 1, 0,
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_account_id_)}},
+    {::_pbi::TcParser::MiniParse, {}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // uint64 attacker_uid = 1;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.attacker_uid_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // uint64 target_uid = 2;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_uid_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // int32 damage = 3;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.damage_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // int32 target_remain_hp = 4;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_remain_hp_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // repeated string target_account_ids = 5;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_account_ids_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcRepeated | ::_fl::kUtf8String | ::_fl::kRepSString)},
+    // string target_account_id = 6;
+    {PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_account_id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+  }},
+  // no aux_entries
+  {{
+    "\35\0\0\0\0\22\21\0"
+    "Protocol.GameGatewayAttackRes"
+    "target_account_ids"
+    "target_account_id"
+  }},
+};
+PROTOBUF_NOINLINE void GameGatewayAttackRes::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.GameGatewayAttackRes)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+    if (CheckHasBitForRepeated(cached_has_bits, 0x00000001U)) {
+      _impl_.target_account_ids_.Clear();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      _impl_.target_account_id_.ClearNonDefaultToEmpty();
+    }
+  }
+  if (BatchCheckHasBit(cached_has_bits, 0x0000003cU)) {
+    ::memset(&_impl_.attacker_uid_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.target_remain_hp_) -
+        reinterpret_cast<char*>(&_impl_.attacker_uid_)) + sizeof(_impl_.target_remain_hp_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL GameGatewayAttackRes::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const GameGatewayAttackRes& this_ = static_cast<const GameGatewayAttackRes&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL GameGatewayAttackRes::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const GameGatewayAttackRes& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.GameGatewayAttackRes)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // uint64 attacker_uid = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_attacker_uid() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          1, this_._internal_attacker_uid(), target);
+    }
+  }
+
+  // uint64 target_uid = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (this_._internal_target_uid() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          2, this_._internal_target_uid(), target);
+    }
+  }
+
+  // int32 damage = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+    if (this_._internal_damage() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<3>(
+              stream, this_._internal_damage(), target);
+    }
+  }
+
+  // int32 target_remain_hp = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (this_._internal_target_remain_hp() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<4>(
+              stream, this_._internal_target_remain_hp(), target);
+    }
+  }
+
+  // repeated string target_account_ids = 5;
+  if (CheckHasBitForRepeated(cached_has_bits, 0x00000001U)) {
+    for (int i = 0, n = this_._internal_target_account_ids_size(); i < n; ++i) {
+      const auto& s = this_._internal_target_account_ids().Get(i);
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          s.data(), static_cast<int>(s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "Protocol.GameGatewayAttackRes.target_account_ids");
+      target = stream->WriteString(5, s, target);
+    }
+  }
+
+  // string target_account_id = 6;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (!this_._internal_target_account_id().empty()) {
+      const ::std::string& _s = this_._internal_target_account_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "Protocol.GameGatewayAttackRes.target_account_id");
+      target = stream->WriteStringMaybeAliased(6, _s, target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.GameGatewayAttackRes)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t GameGatewayAttackRes::ByteSizeLong(const MessageLite& base) {
+  const GameGatewayAttackRes& this_ = static_cast<const GameGatewayAttackRes&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t GameGatewayAttackRes::ByteSizeLong() const {
+  const GameGatewayAttackRes& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:Protocol.GameGatewayAttackRes)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+    // repeated string target_account_ids = 5;
+    if (CheckHasBitForRepeated(cached_has_bits, 0x00000001U)) {
+      total_size +=
+          1 * ::google::protobuf::internal::FromIntSize(this_._internal_target_account_ids().size());
+      for (int i = 0, n = this_._internal_target_account_ids().size(); i < n; ++i) {
+        total_size += ::google::protobuf::internal::WireFormatLite::StringSize(
+            this_._internal_target_account_ids().Get(i));
+      }
+    }
+    // string target_account_id = 6;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (!this_._internal_target_account_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_target_account_id());
+      }
+    }
+    // uint64 attacker_uid = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_attacker_uid() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_attacker_uid());
+      }
+    }
+    // uint64 target_uid = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (this_._internal_target_uid() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_target_uid());
+      }
+    }
+    // int32 damage = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (this_._internal_damage() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_damage());
+      }
+    }
+    // int32 target_remain_hp = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (this_._internal_target_remain_hp() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_target_remain_hp());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void GameGatewayAttackRes::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<GameGatewayAttackRes*>(&to_msg);
+  auto& from = static_cast<const GameGatewayAttackRes&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  ::google::protobuf::Arena* arena = _this->GetArena();
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.GameGatewayAttackRes)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+    if (CheckHasBitForRepeated(cached_has_bits, 0x00000001U)) {
+      _this->_internal_mutable_target_account_ids()->InternalMergeFromWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), arena,
+          from._internal_target_account_ids());
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (!from._internal_target_account_id().empty()) {
+        _this->_internal_set_target_account_id(from._internal_target_account_id());
+      } else {
+        if (_this->_impl_.target_account_id_.IsDefault()) {
+          _this->_internal_set_target_account_id("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_attacker_uid() != 0) {
+        _this->_impl_.attacker_uid_ = from._impl_.attacker_uid_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (from._internal_target_uid() != 0) {
+        _this->_impl_.target_uid_ = from._impl_.target_uid_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (from._internal_damage() != 0) {
+        _this->_impl_.damage_ = from._impl_.damage_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (from._internal_target_remain_hp() != 0) {
+        _this->_impl_.target_remain_hp_ = from._impl_.target_remain_hp_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void GameGatewayAttackRes::CopyFrom(const GameGatewayAttackRes& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:Protocol.GameGatewayAttackRes)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void GameGatewayAttackRes::InternalSwap(GameGatewayAttackRes* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.target_account_ids_.InternalSwap(&other->_impl_.target_account_ids_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.target_account_id_, &other->_impl_.target_account_id_, arena);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.target_remain_hp_)
+      + sizeof(GameGatewayAttackRes::_impl_.target_remain_hp_)
+      - PROTOBUF_FIELD_OFFSET(GameGatewayAttackRes, _impl_.attacker_uid_)>(
+          reinterpret_cast<char*>(&_impl_.attacker_uid_),
+          reinterpret_cast<char*>(&other->_impl_.attacker_uid_));
+}
+
+::google::protobuf::Metadata GameGatewayAttackRes::GetMetadata() const {
   return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
 }
 // @@protoc_insertion_point(namespace_scope)

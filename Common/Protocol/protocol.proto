@@ -34,6 +34,10 @@ enum PacketID {
   PKT_CLIENT_GATEWAY_MOVE_REQ = 24;    // Client -> Gateway
   PKT_GATEWAY_CLIENT_MOVE_RES = 25;    // Gateway -> Client
 
+  // 전투 패킷 (Attack)
+  PKT_CLIENT_GATEWAY_ATTACK_REQ = 26;  // Client -> Gateway (나중에 유저가 때릴 때 사용)
+  PKT_GATEWAY_CLIENT_ATTACK_RES = 27;  // Gateway -> Client (몬스터에게 맞았을 때, 혹은 타격 결과)
+
   // =========================================================
   // [1000~] S2S 내부망 통신 (서버 간 방향성 명시)
   // =========================================================
@@ -46,6 +50,10 @@ enum PacketID {
   PKT_GATEWAY_GAME_MOVE_REQ = 1024;    // Gateway -> Game (이동 패킷 토스)
   PKT_GAME_GATEWAY_MOVE_RES = 1025;    // Game -> Gateway (브로드캐스트 지시)
   PKT_GATEWAY_GAME_LEAVE_REQ = 1026;   // Gateway -> Game (접속 종료 알림)
+
+  // S2S 전투 패킷 (Attack)
+  PKT_GATEWAY_GAME_ATTACK_REQ = 1027;  // Gateway -> Game (유저의 공격 요청 토스)
+  PKT_GAME_GATEWAY_ATTACK_RES = 1028;  // Game -> Gateway (전투 결과 브로드캐스트 지시)
 }
 
 // =========================================================
@@ -113,6 +121,17 @@ message MoveRes {
   float yaw = 5;
 }
 
+message AttackReq {
+  uint64 target_uid = 1;
+}
+
+message AttackRes {
+  uint64 attacker_uid = 1;
+  string target_account_id = 2; // DummyClient에서 내 아이디와 비교할 필드
+  int32 damage = 3;
+  int32 target_remain_hp = 4;
+}
+
 // =========================================================
 // 5. 서버 간 내부 통신 (S2S) 패킷 구조체
 // 메시지 이름도 방향성에 맞춰 통일합니다.
@@ -156,4 +175,15 @@ message GameGatewayMoveRes {
 
 message GatewayGameLeaveReq {
   string account_id = 1; 
+}
+
+// [추가] 전투(공격) 패킷 정의
+// S2C (게임서버 -> 게이트웨이 -> 클라이언트 브로드캐스트)
+message GameGatewayAttackRes {
+    uint64 attacker_uid = 1;     // 공격자 (몬스터 UID)
+    uint64 target_uid = 2;       // 피격자 (유저 UID)
+    int32 damage = 3;            // 입힌 데미지
+    int32 target_remain_hp = 4;  // 피격자의 남은 체력
+    repeated string target_account_ids = 5; // 이펙트를 볼 주변(AOI) 유저들
+    string target_account_id = 6; // 클라이언트에게 누구 맞았는지 알려주기 위한 필드 추가
 }

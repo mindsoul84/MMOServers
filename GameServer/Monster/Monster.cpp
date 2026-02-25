@@ -4,8 +4,10 @@
 // 생성자 구현
 Monster::Monster(uint64_t id, NavMesh* navmesh)
     : monster_id_(id), state_(MonsterState::IDLE), navmesh_(navmesh),
-    target_user_id_(0), path_index_(0) {
-    position_ = { 0.0f, 0.0f, 0.0f }; // 기본 스폰 위치 (임시)
+    target_user_id_(0), path_index_(0),
+    hp_(100), max_hp_(100), attack_power_(15), // 기본 공격력 15
+    attack_range_(0.5f), attack_cooldown_(2.0f), attack_timer_(2.0f) { // 첫 타격은 즉시 때리도록 타이머를 꽉 채워둠
+    position_ = { 0.0f, 0.0f, 0.0f };
 }
 
 // Tick 업데이트 구현
@@ -21,7 +23,7 @@ void Monster::Update(float delta_time) {
         UpdateReturn(delta_time);
         break;
     case MonsterState::ATTACK:
-        UpdateAttack();
+        UpdateAttack(delta_time); // 파라미터 추가
         break;
     }
 }
@@ -79,6 +81,18 @@ void Monster::GiveUpChase() {
     }
 }
 
+void Monster::GiveUpAttack() {
+    state_ = MonsterState::RETURN;
+    target_user_id_ = 0; // 타겟 초기화
+
+    // 공격 포기 전용 로그 출력
+    std::cout << "[Monster " << monster_id_ << "] 🛑 타겟을 잃었습니다! 공격을 중지하고 고향으로 복귀(RETURN)합니다.\n";
+
+    // 타겟 좌표를 고향으로 맞추고 경로 계산
+    target_last_pos_ = spawn_position_;
+    CalculatePath();
+}
+
 // ==========================================
 // CHASE 상태 로직 수정 (추적 종료 시 복귀)
 // ==========================================
@@ -91,6 +105,13 @@ void Monster::UpdateChase(float delta_time) {
     float dx = next_waypoint.x - position_.x;
     float dy = next_waypoint.y - position_.y;
     float distance = std::sqrt(dx * dx + dy * dy);
+
+    // [추가] 유저가 내 공격 사거리(1.5f) 이내로 들어왔다면?
+    if (distance <= attack_range_) {
+        state_ = MonsterState::ATTACK;
+        std::cout << "[Monster " << monster_id_ << "] ⚔️ 타겟 사거리 진입! 공격(ATTACK) 시작!\n";
+        return;
+    }
 
     if (distance < 0.1f) {
         path_index_++;
@@ -153,10 +174,30 @@ void Monster::UpdateReturn(float delta_time) {
     position_.y += (dy / distance) * speed * delta_time;
 }
 
-// ATTACK 상태 로직
-void Monster::UpdateAttack() {
-    // [로직] 타겟에게 데미지를 입히는 패킷을 큐에 넣는다.
-    // 타겟이 도망가서 멀어졌다면 다시 CHASE 상태로 변경하여 추적 재개
+// UpdateAttack 로직 구현
+void Monster::UpdateAttack(float delta_time) {
+    float dx = target_last_pos_.x - position_.x;
+    float dy = target_last_pos_.y - position_.y;
+    float dist_to_target = std::sqrt(dx * dx + dy * dy);
+
+    // 1. 유저가 사거리 밖으로 도망갔다면 다시 추적(CHASE)
+    if (dist_to_target > attack_range_) {
+        state_ = MonsterState::CHASE;
+        std::cout << "[Monster " << monster_id_ << "] 🏃 타겟이 도망감. 다시 추적(CHASE) 재개!\n";
+        CalculatePath();
+        return;
+    }
+
+    // 2. 쿨타임(2초)마다 찰지게 때리기!
+    attack_timer_ += delta_time;
+    if (attack_timer_ >= attack_cooldown_) {
+        attack_timer_ -= attack_cooldown_; // 쿨타임 초기화
+
+        // 외부에 등록된 콜백(GameServer/MonsterManager)에게 타격 사실 알림
+        if (on_attack_callback_) {
+            on_attack_callback_(monster_id_, target_user_id_, attack_power_);
+        }
+    }
 }
 
 // ==========================================

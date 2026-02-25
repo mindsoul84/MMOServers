@@ -21,9 +21,17 @@ extern std::unique_ptr<Zone> g_zone;
 extern boost::asio::io_context g_io_context;                     // [추가]
 extern boost::asio::io_context::strand g_game_strand;            // [추가]
 
-struct PlayerInfo { uint64_t uid; float x, y; };
+struct PlayerInfo {
+    uint64_t uid;
+    float x, y;
+    int hp = 100;
+};
+
 extern std::unordered_map<std::string, PlayerInfo> g_playerMap;
 extern std::unordered_map<uint64_t, std::string> g_uidToAccount;
+
+// GameServer.cpp에 있는 브로드캐스트 함수를 가져옵니다.
+extern void BroadcastToGateways(uint16_t pktId, const google::protobuf::Message& msg);
 
 // [추가] AI 타이머와 상태 저장을 위한 변수
 std::unique_ptr<boost::asio::steady_timer> g_ai_timer;
@@ -32,7 +40,7 @@ std::unordered_map<uint64_t, float> g_sync_timers;
 const float NETWORK_SYNC_INTERVAL = 2.0f;
 
 // ==========================================
-// [1] 몬스터 초기 스폰 함수
+// 몬스터 초기 스폰 함수
 // ==========================================
 void InitMonsters() {
     struct SpawnData { float x, y; };
@@ -46,6 +54,77 @@ void InitMonsters() {
         uint64_t mon_id = 10000 + i;
         auto mon = std::make_shared<Monster>(mon_id, &g_navMesh);
 
+        // =====================================================================
+        // [새로 추가된 핵심 부분] 몬스터가 타격을 적중시켰을 때 실행될 콜백(규칙)
+        // =====================================================================
+        mon->SetOnAttackCallback([](uint64_t attacker_uid, uint64_t target_uid, int damage) {
+            auto it_acc = g_uidToAccount.find(target_uid);
+            if (it_acc == g_uidToAccount.end()) return; // 유저가 이미 나갔으면 무시
+
+            auto it_player = g_playerMap.find(it_acc->second);
+            if (it_player == g_playerMap.end()) return;
+
+            // 1. 유저의 HP 차감 연산
+            it_player->second.hp -= damage;
+            if (it_player->second.hp < 0) it_player->second.hp = 0;
+
+            // [추가] 유저 기절(사망) 처리
+            if (it_player->second.hp <= 0) {
+                std::cout << "\n[System] 💀 당신(" << it_acc->second << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
+
+                float old_x = it_player->second.x;
+                float old_y = it_player->second.y;
+
+                // HP 만땅 회복 및 좌표 초기화 (마을)
+                it_player->second.hp = 100;
+                it_player->second.x = 0.0f;
+                it_player->second.y = 0.0f;
+
+                // 물리 엔진(Zone)에서도 유저를 마을로 순간이동 시킴!
+                g_zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
+
+                // ★ [추가 1] 부활(텔레포트) 패킷을 생성해서 Gateway로 쏩니다!
+                Protocol::GameGatewayMoveRes teleport_res;
+                teleport_res.set_account_id(it_acc->second);
+                teleport_res.set_x(0.0f);
+                teleport_res.set_y(0.0f);
+                teleport_res.set_z(0.0f);
+                teleport_res.set_yaw(0.0f);
+                teleport_res.add_target_account_ids(it_acc->second);
+
+                BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, teleport_res);
+
+                // 사망했으므로 이번 공격 데미지 전송은 생략하고 종료
+                return;
+            }
+
+            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << it_acc->second
+                << ")를 공격! 데미지: " << damage << ", 남은 체력: " << it_player->second.hp << "\n";
+
+            // 2. 주변 유저들에게 타격 사실을 알리기 위한 패킷 세팅
+            Protocol::GameGatewayAttackRes s2s_res;
+            s2s_res.set_attacker_uid(attacker_uid);
+            s2s_res.set_target_uid(target_uid);
+            s2s_res.set_target_account_id(it_acc->second);
+            s2s_res.set_damage(damage);
+            s2s_res.set_target_remain_hp(it_player->second.hp);
+
+            auto aoi_uids = g_zone->GetPlayersInAOI(it_player->second.x, it_player->second.y);
+            for (uint64_t aoi_uid : aoi_uids) {
+                if (aoi_uid < 10000) { // 주변 '유저'들에게만 전송
+                    auto target_acc = g_uidToAccount.find(aoi_uid);
+                    if (target_acc != g_uidToAccount.end()) {
+                        s2s_res.add_target_account_ids(target_acc->second);
+                    }
+                }
+            }
+
+            // ★ [추가 2] TODO를 지우고, 실제로 조립된 전투 패킷을 Gateway로 쏩니다!
+            BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
+            });
+        // =====================================================================
+
+        // 기존의 위치 세팅 및 Zone 등록 로직 (그대로 유지)
         mon->SetPosition(spawn_list[i].x, spawn_list[i].y, 0.0f);
         mon->SetSpawnPosition(spawn_list[i].x, spawn_list[i].y, 0.0f);
 
@@ -87,7 +166,7 @@ void ScheduleNextAITick() {
                             if (it_player != g_playerMap.end()) {
                                 float dx = it_player->second.x - old_x;
                                 float dy = it_player->second.y - old_y;
-                                if (std::sqrt(dx * dx + dy * dy) < 0.1f) { // 시야
+                                if (std::sqrt(dx * dx + dy * dy) < 1.0f) { // 시야
                                     mon->SetTarget(uid, { it_player->second.x, it_player->second.y, 0.0f });
                                     break;
                                 }
@@ -112,6 +191,23 @@ void ScheduleNextAITick() {
                     }
                 }
                 if (!target_found) mon->GiveUpChase();
+            }
+            else if (mon->GetState() == MonsterState::ATTACK) {
+                uint64_t target_uid = mon->GetTargetUserId();
+                bool target_found = false;
+                auto it_acc = g_uidToAccount.find(target_uid);
+                if (it_acc != g_uidToAccount.end()) {
+                    auto it_player = g_playerMap.find(it_acc->second);
+                    if (it_player != g_playerMap.end()) {
+                        float dx = it_player->second.x - old_x;
+                        float dy = it_player->second.y - old_y;
+                        if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
+                            mon->UpdateTargetPosition({ it_player->second.x, it_player->second.y, 0.0f });
+                            target_found = true;
+                        }
+                    }
+                }
+                if (!target_found) mon->GiveUpAttack();
             }
 
             mon->Update(delta_time);

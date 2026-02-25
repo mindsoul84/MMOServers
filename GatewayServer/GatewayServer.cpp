@@ -293,6 +293,35 @@ void Handle_MoveRes_FromGame(std::shared_ptr<GameConnection>& conn, char* payloa
 }
 
 // ==========================================
+// [추가] GameServer -> Gateway -> Client 전투(피격) 브로드캐스트 릴레이
+// ==========================================
+void Handle_GameGatewayAttackRes(std::shared_ptr<GameConnection>& session, char* payload, uint16_t size) {
+    Protocol::GameGatewayAttackRes s2s_res;
+    if (s2s_res.ParseFromArray(payload, size)) {
+
+        // 1. 클라이언트가 읽을 수 있는 AttackRes 패킷으로 변환 (포장지 교체)
+        Protocol::AttackRes client_res;
+        client_res.set_attacker_uid(s2s_res.attacker_uid());
+        client_res.set_target_account_id(s2s_res.target_account_id());
+        client_res.set_damage(s2s_res.damage());
+        client_res.set_target_remain_hp(s2s_res.target_remain_hp());
+
+        // 2. 이펙트/데미지를 봐야 하는 주변 유저(AOI)들에게 각각 전송
+        std::lock_guard<std::mutex> lock(g_clientMutex);
+        for (int i = 0; i < s2s_res.target_account_ids_size(); ++i) {
+            const std::string& target_id = s2s_res.target_account_ids(i);
+
+            // 현재 게이트웨이 세션 맵에 접속해 있는 유저라면 패킷 쏘기!
+            auto it = g_clientMap.find(target_id);
+            if (it != g_clientMap.end() && it->second) {
+                // PKT_GATEWAY_CLIENT_ATTACK_RES (27번) 으로 클라이언트에게 전송
+                it->second->Send(Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES, client_res);
+            }
+        }
+    }
+}
+
+// ==========================================
 // 5. GatewayServer 수신 대기열 및 Main
 // ==========================================
 class GatewayServer {
@@ -325,6 +354,7 @@ int main() {
     // ==============================================
     // 주의: PKT_MOVE_RES(25)가 아니라 PKT_S2S_MOVE_RES(1025)를 등록해야 합니다.
     g_game_dispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_MOVE_RES, Handle_MoveRes_FromGame);
+    g_game_dispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, Handle_GameGatewayAttackRes);
 
     try {
         boost::asio::io_context io_context;

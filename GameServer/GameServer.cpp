@@ -49,6 +49,7 @@ std::vector<std::shared_ptr<Monster>> g_monsters;
 struct PlayerInfo {
     uint64_t uid;
     float x, y;
+    int hp = 100;
 };
 
 std::unordered_map<std::string, PlayerInfo> g_playerMap;  // account_id -> PlayerInfo
@@ -69,6 +70,9 @@ PacketDispatcher<GatewaySession> g_s2s_gateway_dispatcher;
 // 게이트웨이 접속 개수 카운터 (일반적으로 1개지만 확장성을 위해 유지)
 static std::atomic<int> g_connected_gateways{ 0 };
 
+// ★ [추가] 연결된 게이트웨이 세션들을 보관할 리스트 (AI 스레드에서 접근하기 위함)
+std::vector<std::shared_ptr<GatewaySession>> g_gatewaySessions;
+std::mutex g_gatewaySessionMutex;
 
 // ==========================================
 // 2. GatewaySession: Gateway로부터의 S2S 통신(수신/송신) 담당
@@ -144,6 +148,15 @@ private:
             });
     }
 };
+
+// 모든 게이트웨이에 패킷을 뿌려주는 전역 브로드캐스트 함수
+void BroadcastToGateways(uint16_t pktId, const google::protobuf::Message& msg)
+{
+    std::lock_guard<std::mutex> lock(g_gatewaySessionMutex);
+    for (auto& session : g_gatewaySessions) {
+        if (session) session->Send(pktId, msg);
+    }
+}
 
 // ==========================================
 // 이동 패킷 핸들러 (Strand 적용)
@@ -263,7 +276,19 @@ private:
             if (!ec) {
                 int current_count = ++g_connected_gateways;
                 std::cout << "[GameServer] S2S 통신: GatewayServer 접속 확인 완료! (현재 연결된 Gateway: " << current_count << "개)\n";
-                std::make_shared<GatewaySession>(std::move(socket))->start();
+
+                // =========================================================
+                // ★ [수정] 세션을 즉시 실행만 하는 것이 아니라, 
+                // 나중에 BroadcastToGateways에서 쓸 수 있도록 전역 리스트에 꼭 넣어주어야 합니다!
+                // =========================================================
+                auto new_session = std::make_shared<GatewaySession>(std::move(socket));
+                {
+                    std::lock_guard<std::mutex> lock(g_gatewaySessionMutex);
+                    g_gatewaySessions.push_back(new_session);
+                }
+
+                new_session->start();
+                // =========================================================
             }
             else {
                 std::cerr << "[Error] Gateway Accept 실패: " << ec.message() << "\n";
@@ -298,7 +323,7 @@ int main() {
     // ★ 디스패처 등록
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ, Handle_GatewayGameMoveReq);
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, Handle_GatewayGameLeaveReq);
-
+    
     try {
         //boost::asio::io_context io_context;
 

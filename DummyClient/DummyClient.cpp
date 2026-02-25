@@ -136,8 +136,13 @@ int main() {
         // 인게임 통신: 수신 스레드와 메인 루프 (모드 전환)
         // ================================================
 
+        // 수신 스레드와 메인 스레드가 함께 공유할 내 상태 변수들
+        float my_x = 0.0f;
+        float my_y = 0.0f;
+        int my_hp = 100;
+
         // [서버 패킷 수신 전용 백그라운드 스레드]
-        std::thread recv_thread([&socket, my_id]() {
+        std::thread recv_thread([&socket, my_id, &my_x, &my_y, &my_hp]() {
             try {
                 while (true) {
                     PacketHeader h;
@@ -154,10 +159,45 @@ int main() {
                     else if (h.id == Protocol::PKT_GATEWAY_CLIENT_MOVE_RES) {
                         Protocol::MoveRes move_res;
                         if (move_res.ParseFromArray(p.data(), p.size())) {
-                            // 내가 움직인 결과는 화면 도배 방지를 위해 숨기고, 다른 유저의 이동만 출력합니다.
-                            //if (move_res.account_id() != my_id) {
-                            //    std::cout << "\n[이동] 유저(" << move_res.account_id() << ") -> X:" << move_res.x() << " Y:" << move_res.y() << "\n";
-                            //}
+                            if (move_res.account_id() == my_id) {
+                                float dx = my_x - move_res.x();
+                                float dy = my_y - move_res.y();
+                                float distance = std::sqrt(dx * dx + dy * dy);
+
+                                // 내가 걸어간 거라면 거리가 0입니다. 
+                                // 0.1 이상 차이가 나면 서버가 강제로 좌표를 덮어씌운 것(텔레포트)입니다!
+                                if (distance > 0.1f) {
+                                    my_x = move_res.x();
+                                    my_y = move_res.y();
+
+                                    // ★ [추가] 마을(0,0)로 부활한 것이라면 체력도 100으로 가득 채워줍니다.
+                                    if (my_x == 0.0f && my_y == 0.0f) {
+                                        my_hp = 100;
+                                    }
+
+                                    std::cout << "\n✨ [System] 기절하여 서버에 의해 마을(X:" << my_x << ", Y:" << my_y << ")로 강제 이동(부활) 되었습니다!\n";
+
+                                    // 키보드를 누르지 않아도 상태창(내 정보)을 즉시 다시 그려줍니다.
+                                    std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
+                                }
+                            }
+                        }
+                    }
+                    // 전투(피격) 패킷 처리
+                    else if (h.id == Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES) {
+                        Protocol::AttackRes attack_res;
+                        if (attack_res.ParseFromArray(p.data(), p.size())) {
+                            if (attack_res.target_account_id() == my_id) {
+                                my_hp = attack_res.target_remain_hp();
+                                std::cout << "\n🩸 [전투] 몬스터에게 " << attack_res.damage() << " 데미지를 입었습니다!\n";
+
+                                if (my_hp <= 0) {
+                                    std::cout << "💀 체력이 0이 되어 기절했습니다...\n";
+                                }
+
+                                // 맞을 때마다 키보드를 누르지 않아도 즉시 깎인 체력을 UI에 반영합니다.
+                                std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
+                            }
                         }
                     }
                 }
@@ -168,8 +208,6 @@ int main() {
 
 
         // 하나의 세련된 논블로킹 키보드 제어 루프로 통합
-
-        float my_x = 0.0f, my_y = 0.0f;
         std::cout << "\n [액션 모드] 방향키: 이동 / Enter: 채팅 / ESC: 종료\n";
         std::cout << "--------------------------------------\n";
 
@@ -198,8 +236,8 @@ int main() {
                         move_req.set_yaw(0.0f);
                         SendPacket(socket, Protocol::PKT_CLIENT_GATEWAY_MOVE_REQ, move_req);
 
-                        // \r 을 사용해 같은 줄에서 내 좌표만 실시간 갱신합니다.
-                        std::cout << "[내 위치] X:" << my_x << " Y:" << my_y << "          \r";
+                        // 내 위치 옆에 HP 정보도 실시간으로 표시해 줍니다.
+                        std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
                     }
                 }
                 // 2. Enter 키 (13) 누름 -> [채팅 모드] 진입
