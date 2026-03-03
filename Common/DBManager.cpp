@@ -1,4 +1,5 @@
 ﻿#include "DBManager.h"
+#include "ConfigManager.h"
 
 bool DBManager::Connect() {
     SQLRETURN retcode;
@@ -16,18 +17,22 @@ bool DBManager::Connect() {
     retcode = SQLAllocHandle(SQL_HANDLE_DBC, henv_, &hdbc_);
     if (retcode != SQL_SUCCESS && retcode != SQL_SUCCESS_WITH_INFO) return false;
 
-    // =========================================================================
-    // ★ MSSQL 접속 문자열 (Windows 인증, SQLEXPRESS, game_db)
-    // =========================================================================
-    std::wstring connStr = L"Driver={SQL Server};Server=.\\SQLEXPRESS;Database=game_db;Trusted_Connection=yes;";
-    SQLWCHAR outConnStr[1024];
+    // ==========================================================
+    // ConfigManager에서 값을 가져와 동적으로 설정
+    // ==========================================================
+    std::string serverName = ConfigManager::GetInstance().GetServerName();
+    std::string database = ConfigManager::GetInstance().GetDatabase();
+
+    std::string connStr = "Driver={SQL Server};Server=" + serverName + ";Database=" + database + ";Trusted_Connection=yes;";
+
+    SQLCHAR outConnStr[1024];
     SQLSMALLINT outConnStrLen;
 
-    // 4. DB 연결 시도
-    retcode = SQLDriverConnectW(
+    // std::string을 사용하므로 SQLDriverConnectA (ANSI 버전) 호출
+    retcode = SQLDriverConnectA(
         hdbc_,
         NULL,
-        (SQLWCHAR*)connStr.c_str(),
+        reinterpret_cast<SQLCHAR*>(const_cast<char*>(connStr.c_str())),
         SQL_NTS,
         outConnStr,
         1024,

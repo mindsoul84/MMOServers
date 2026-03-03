@@ -1,3 +1,7 @@
 {
-	"db_conn" : true
+	"db_conn": true,
+	"MSSQL_INFO": {
+		"ServerName": ".\\SQLEXPRESS",
+		"Database": "game_db"
+	}
 }

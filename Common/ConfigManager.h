@@ -7,6 +7,8 @@
 class ConfigManager {
 private:
     bool db_conn_ = false;
+    std::string server_name_;
+    std::string database_;
 
     // 싱글톤 패턴
     ConfigManager() = default;
@@ -30,8 +32,15 @@ public:
             // "db_conn" 키의 값을 읽어옵니다. (기본값은 false로 세팅)
             db_conn_ = pt.get<bool>("db_conn", false);
 
-            std::cout << "[ConfigManager] ⚙️ 환경 설정 로드 성공! (DB 연동: "
+            // 2. 중첩된 속성(MSSQL_INFO) 읽기 (기본값도 설정해줍니다)
+            server_name_ = pt.get<std::string>("MSSQL_INFO.ServerName", ".\\SQLEXPRESS");
+            database_ = pt.get<std::string>("MSSQL_INFO.Database", "game_db");
+
+            std::cout << "[ConfigManager] 환경 설정 로드 성공! (DB 연동: "
                 << (db_conn_ ? "ON" : "OFF") << ")\n";
+            if (db_conn_) {
+                std::cout << "  -> Target DB: " << server_name_ << " / " << database_ << "\n";
+            }
             return true;
         }
         catch (const std::exception& e) {
@@ -43,4 +52,8 @@ public:
 
     // DB 연동 여부 반환
     bool UseDB() const { return db_conn_; }
+
+    // Getter 함수들
+    const std::string& GetServerName() const { return server_name_; }
+    const std::string& GetDatabase() const { return database_; }
 };

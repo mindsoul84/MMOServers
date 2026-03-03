@@ -1,4 +1,5 @@
 #include "MonsterManager.h"
+#include "../Common/DataManager/MonsterDataManager.h"
 #include "Monster.h"
 #include "../Pathfinder/Pathfinder.h"
 #include "../Zone/Zone.h"
@@ -43,15 +44,14 @@ const float NETWORK_SYNC_INTERVAL = 2.0f;
 // 몬스터 초기 스폰 함수
 // ==========================================
 void InitMonsters() {
-    struct SpawnData { float x, y; };
-    SpawnData spawn_list[3] = {
-        { 5.0f, 45.0f },   // 10000번 몬스터 고향
-        { 8.0f, 7.0f },    // 10001번 몬스터 고향
-        { 11.0f, 9.0f }    // 10002번 몬스터 고향
-    };
 
-    for (int i = 0; i < 3; ++i) {
-        uint64_t mon_id = 10000 + i;
+    // 이제 MonsterDataManager에서 스폰 리스트를 가져옵니다.
+    const auto& spawnList = MonsterDataManager::GetInstance().GetMonsterSpawnList();
+
+    // JSON에서 로드된 spawnList를 순회합니다.
+    for (const auto& spawn_data : spawnList) {
+
+        uint64_t mon_id = spawn_data.mon_id;
         auto mon = std::make_shared<Monster>(mon_id, &g_navMesh);
 
         // =====================================================================
@@ -124,9 +124,9 @@ void InitMonsters() {
             });
         // =====================================================================
 
-        // 기존의 위치 세팅 및 Zone 등록 로직 (그대로 유지)
-        mon->SetPosition(spawn_list[i].x, spawn_list[i].y, 0.0f);
-        mon->SetSpawnPosition(spawn_list[i].x, spawn_list[i].y, 0.0f);
+        // JSON에서 가져온 x, y 좌표 적용
+        mon->SetPosition(spawn_data.x, spawn_data.y, 0.0f);
+        mon->SetSpawnPosition(spawn_data.x, spawn_data.y, 0.0f);
 
         g_monsters.push_back(mon);
         g_zone->EnterZone(mon_id, mon->GetPosition().x, mon->GetPosition().y);
