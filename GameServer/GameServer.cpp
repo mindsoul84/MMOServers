@@ -16,6 +16,9 @@
 
 #include <boost/asio/strand.hpp>
 
+#include "../Common/ConfigManager.h"
+#include "../Common/DBManager.h"
+
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
 
@@ -304,6 +307,20 @@ private:
 int main() {
     // 윈도우 콘솔 한글 깨짐 방지
     SetConsoleOutputCP(CP_UTF8);
+
+    // 1. 가장 먼저 환경 설정(config.json)을 로드합니다.
+    ConfigManager::GetInstance().LoadConfig("config.json");
+
+    // 2. 설정에 DB 연동이 true로 되어 있다면 DB 연결 시도
+    if (ConfigManager::GetInstance().UseDB()) {
+        if (!DBManager::GetInstance().Connect()) {
+            std::cerr << "DB 연결에 실패하여 서버를 종료합니다.\n";
+            return -1;
+        }
+    }
+    else {
+        std::cout << "[System] ⚠️ config.json 설정에 따라 DB 연동을 건너뜁니다.\n";
+    }
 
     // 추가: 한글 세팅이 끝난 안전한 타이밍에 Zone을 생성합니다!
     g_zone = std::make_unique<Zone>(1000, 1000, 50);

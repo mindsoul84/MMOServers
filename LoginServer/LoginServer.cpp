@@ -12,6 +12,9 @@
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
 
+#include "../Common/ConfigManager.h"
+#include "../Common/DBManager.h"
+
 #pragma pack(push, 1)
 struct PacketHeader {
     uint16_t size;
@@ -288,6 +291,20 @@ private:
 
 int main() {
     SetConsoleOutputCP(CP_UTF8);
+
+    // 1. 가장 먼저 환경 설정(config.json)을 로드합니다.
+    ConfigManager::GetInstance().LoadConfig("config.json");
+
+    // 2. 설정에 DB 연동이 true로 되어 있다면 DB 연결 시도
+    if (ConfigManager::GetInstance().UseDB()) {
+        if (!DBManager::GetInstance().Connect()) {
+            std::cerr << "DB 연결에 실패하여 서버를 종료합니다.\n";
+            return -1;
+        }
+    }
+    else {
+        std::cout << "[System] ⚠️ config.json 설정에 따라 DB 연동을 건너뜁니다.\n";
+    }
 
     g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
     g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT, Handle_Heartbeat);
