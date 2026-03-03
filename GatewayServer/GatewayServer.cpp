@@ -41,30 +41,28 @@ class GameConnection : public std::enable_shared_from_this<GameConnection> {
 private:
     tcp::socket socket_;
     boost::asio::io_context& io_context_;
+    boost::asio::steady_timer retry_timer_; // ★ 재연결을 위한 비동기 타이머
     PacketHeader header_;
     std::vector<char> payload_buf_;
 
+    std::string target_ip_;
+    short target_port_;
+
 public:
     GameConnection(boost::asio::io_context& io_context)
-        : socket_(io_context), io_context_(io_context) {
+        : socket_(io_context), io_context_(io_context), retry_timer_(io_context) {
     }
 
     void Connect(const std::string& ip, short port) {
-        try {
-            tcp::resolver resolver(io_context_);
-            auto endpoints = resolver.resolve(ip, std::to_string(port));
-            boost::asio::connect(socket_, endpoints);
-            std::cout << "[Gateway] 🕹️ GameServer(S2S) 9000번 포트에 성공적으로 연결되었습니다!\n";
-            ReadHeader();
-        }
-        catch (std::exception&) {
-            // 강제 종료(Crash)를 막고 친절하게 알려줍니다.
-            std::cerr << "🚨 [치명적 에러] GameServer(9000 포트)가 꺼져 있습니다! GameServer를 먼저 켜주세요!\n";            
-            exit(1); // 안전하게 프로그램 종료
-        }
+        target_ip_ = ip;
+        target_port_ = port;
+        DoConnect(); // 비동기 연결 시작
     }
 
     void Send(uint16_t pktId, const google::protobuf::Message& msg) {
+        // 소켓이 안 열려있으면 쏘지 않음 (크래시 방지)
+        if (!socket_.is_open()) return;
+
         std::string payload;
         msg.SerializeToString(&payload);
         PacketHeader header;
@@ -83,6 +81,48 @@ public:
     }
 
 private:
+    void DoConnect() {
+        try {
+            tcp::resolver resolver(io_context_);
+            auto endpoints = resolver.resolve(target_ip_, std::to_string(target_port_));
+
+            auto self(shared_from_this());
+            // ★ 동기(connect) -> 비동기(async_connect) 로 변경
+            boost::asio::async_connect(socket_, endpoints,
+                [this, self](boost::system::error_code ec, tcp::endpoint) {
+                    if (!ec) {
+                        std::cout << "[Gateway] 🕹️ GameServer(S2S) 9000번 포트에 성공적으로 연결되었습니다!\n";
+                        ReadHeader(); // 연결 성공 시 수신 대기 시작
+                    }
+                    else {
+                        std::cerr << "🚨 [Gateway] GameServer가 꺼져 있습니다. 3초 후 재연결 시도...\n";
+                        ScheduleRetry();
+                    }
+                });
+        }
+        catch (std::exception& e) {
+            std::cerr << "[Gateway] 주소 변환 에러: " << e.what() << "\n";
+            ScheduleRetry();
+        }
+    }
+
+    void ScheduleRetry() {
+        // 기존 소켓이 열려있다면 깔끔하게 닫아줍니다.
+        if (socket_.is_open()) {
+            boost::system::error_code ec;
+            socket_.close(ec);
+        }
+
+        auto self(shared_from_this());
+        retry_timer_.expires_after(std::chrono::seconds(3));
+        retry_timer_.async_wait([this, self](boost::system::error_code ec) {
+            if (!ec) {
+                std::cout << "[Gateway] GameServer 재연결 시도 중...\n";
+                DoConnect();
+            }
+            });
+    }
+
     void ReadHeader() {
         auto self(shared_from_this());
         boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
@@ -91,7 +131,6 @@ private:
                     if (header_.size < sizeof(PacketHeader) || header_.size > 4096) return;
                     uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
                     if (payload_size == 0) {
-                        // self의 복사본(session_ptr)을 만들어 넘깁니다.
                         auto session_ptr = self;
                         g_game_dispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
                         ReadHeader();
@@ -101,7 +140,11 @@ private:
                         ReadPayload(payload_size);
                     }
                 }
-                else std::cerr << "[Gateway] 🚨 GameServer와의 연결이 끊어졌습니다!\n";
+                else {
+                    // ★ 게임 서버가 도중에 꺼졌을 때를 대비한 재연결
+                    std::cerr << "🚨 [Gateway] GameServer와의 연결이 끊어졌습니다!\n";
+                    ScheduleRetry();
+                }
             });
     }
 
@@ -110,10 +153,14 @@ private:
         boost::asio::async_read(socket_, boost::asio::buffer(payload_buf_.data(), payload_size),
             [this, self, payload_size](boost::system::error_code ec, std::size_t length) {
                 if (!ec) {
-                    // 여기도 마찬가지로 복사본을 만들어 넘깁니다.
                     auto session_ptr = self;
                     g_game_dispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                     ReadHeader();
+                }
+                else {
+                    // ★ 게임 서버가 도중에 꺼졌을 때를 대비한 재연결
+                    std::cerr << "🚨 [Gateway] GameServer와의 연결이 끊어졌습니다!\n";
+                    ScheduleRetry();
                 }
             });
     }
@@ -311,7 +358,7 @@ void Handle_GameGatewayAttackRes(std::shared_ptr<GameConnection>& session, char*
         for (int i = 0; i < s2s_res.target_account_ids_size(); ++i) {
             const std::string& target_id = s2s_res.target_account_ids(i);
 
-            // 현재 게이트웨이 세션 맵에 접속해 있는 유저라면 패킷 쏘기!
+            // 현재 게이트웨이 방명록(세션 맵)에 접속해 있는 유저라면 패킷 쏘기!
             auto it = g_clientMap.find(target_id);
             if (it != g_clientMap.end() && it->second) {
                 // PKT_GATEWAY_CLIENT_ATTACK_RES (27번) 으로 클라이언트에게 전송
