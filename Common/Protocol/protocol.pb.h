@@ -89,6 +89,10 @@ class GatewayConnectRes;
 struct GatewayConnectResDefaultTypeInternal;
 extern GatewayConnectResDefaultTypeInternal _GatewayConnectRes_default_instance_;
 extern const ::google::protobuf::internal::ClassDataFull GatewayConnectRes_class_data_;
+class GatewayGameAttackReq;
+struct GatewayGameAttackReqDefaultTypeInternal;
+extern GatewayGameAttackReqDefaultTypeInternal _GatewayGameAttackReq_default_instance_;
+extern const ::google::protobuf::internal::ClassDataFull GatewayGameAttackReq_class_data_;
 class GatewayGameLeaveReq;
 struct GatewayGameLeaveReqDefaultTypeInternal;
 extern GatewayGameLeaveReqDefaultTypeInternal _GatewayGameLeaveReq_default_instance_;
@@ -2543,6 +2547,213 @@ class GatewayGameLeaveReq final : public ::google::protobuf::Message
 };
 
 extern const ::google::protobuf::internal::ClassDataFull GatewayGameLeaveReq_class_data_;
+// -------------------------------------------------------------------
+
+class GatewayGameAttackReq final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:Protocol.GatewayGameAttackReq) */ {
+ public:
+  inline GatewayGameAttackReq() : GatewayGameAttackReq(nullptr) {}
+  ~GatewayGameAttackReq() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(GatewayGameAttackReq* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(GatewayGameAttackReq));
+  }
+#endif
+
+  template <typename = void>
+  explicit PROTOBUF_CONSTEXPR GatewayGameAttackReq(::google::protobuf::internal::ConstantInitialized);
+
+  inline GatewayGameAttackReq(const GatewayGameAttackReq& from) : GatewayGameAttackReq(nullptr, from) {}
+  inline GatewayGameAttackReq(GatewayGameAttackReq&& from) noexcept
+      : GatewayGameAttackReq(nullptr, ::std::move(from)) {}
+  inline GatewayGameAttackReq& operator=(const GatewayGameAttackReq& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline GatewayGameAttackReq& operator=(GatewayGameAttackReq&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const GatewayGameAttackReq& default_instance() {
+    return *reinterpret_cast<const GatewayGameAttackReq*>(
+        &_GatewayGameAttackReq_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages = 19;
+  friend void swap(GatewayGameAttackReq& a, GatewayGameAttackReq& b) { a.Swap(&b); }
+  inline void Swap(GatewayGameAttackReq* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(GatewayGameAttackReq* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  GatewayGameAttackReq* PROTOBUF_NONNULL New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<GatewayGameAttackReq>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const GatewayGameAttackReq& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const GatewayGameAttackReq& from) { GatewayGameAttackReq::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  ::size_t ByteSizeLong() const final;
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(GatewayGameAttackReq* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "Protocol.GatewayGameAttackReq"; }
+
+  explicit GatewayGameAttackReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  GatewayGameAttackReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const GatewayGameAttackReq& from);
+  GatewayGameAttackReq(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, GatewayGameAttackReq&& from) noexcept
+      : GatewayGameAttackReq(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_();
+
+  ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kAccountIdFieldNumber = 1,
+    kTargetUidFieldNumber = 2,
+  };
+  // string account_id = 1;
+  void clear_account_id() ;
+  const ::std::string& account_id() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_account_id(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_account_id();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_account_id();
+  void set_allocated_account_id(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_account_id() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_account_id(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_account_id();
+
+  public:
+  // uint64 target_uid = 2;
+  void clear_target_uid() ;
+  ::uint64_t target_uid() const;
+  void set_target_uid(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_target_uid() const;
+  void _internal_set_target_uid(::uint64_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:Protocol.GatewayGameAttackReq)
+ private:
+  class _Internal;
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<1, 2,
+                                   0, 48,
+                                   2>
+      _table_;
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const GatewayGameAttackReq& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::internal::ArenaStringPtr account_id_;
+    ::uint64_t target_uid_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_protocol_2eproto;
+};
+
+extern const ::google::protobuf::internal::ClassDataFull GatewayGameAttackReq_class_data_;
 // -------------------------------------------------------------------
 
 class GatewayConnectRes final : public ::google::protobuf::Message
@@ -6638,6 +6849,100 @@ inline void GameGatewayAttackRes::set_allocated_target_account_id(::std::string*
     _impl_.target_account_id_.Set("", GetArena());
   }
   // @@protoc_insertion_point(field_set_allocated:Protocol.GameGatewayAttackRes.target_account_id)
+}
+
+// -------------------------------------------------------------------
+
+// GatewayGameAttackReq
+
+// string account_id = 1;
+inline void GatewayGameAttackReq::clear_account_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.account_id_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000001U);
+}
+inline const ::std::string& GatewayGameAttackReq::account_id() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:Protocol.GatewayGameAttackReq.account_id)
+  return _internal_account_id();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void GatewayGameAttackReq::set_account_id(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  _impl_.account_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:Protocol.GatewayGameAttackReq.account_id)
+}
+inline ::std::string* PROTOBUF_NONNULL GatewayGameAttackReq::mutable_account_id()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ::std::string* _s = _internal_mutable_account_id();
+  // @@protoc_insertion_point(field_mutable:Protocol.GatewayGameAttackReq.account_id)
+  return _s;
+}
+inline const ::std::string& GatewayGameAttackReq::_internal_account_id() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.account_id_.Get();
+}
+inline void GatewayGameAttackReq::_internal_set_account_id(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.account_id_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL GatewayGameAttackReq::_internal_mutable_account_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.account_id_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE GatewayGameAttackReq::release_account_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:Protocol.GatewayGameAttackReq.account_id)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000001U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  auto* released = _impl_.account_id_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.account_id_.Set("", GetArena());
+  }
+  return released;
+}
+inline void GatewayGameAttackReq::set_allocated_account_id(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  }
+  _impl_.account_id_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.account_id_.IsDefault()) {
+    _impl_.account_id_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:Protocol.GatewayGameAttackReq.account_id)
+}
+
+// uint64 target_uid = 2;
+inline void GatewayGameAttackReq::clear_target_uid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.target_uid_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000002U);
+}
+inline ::uint64_t GatewayGameAttackReq::target_uid() const {
+  // @@protoc_insertion_point(field_get:Protocol.GatewayGameAttackReq.target_uid)
+  return _internal_target_uid();
+}
+inline void GatewayGameAttackReq::set_target_uid(::uint64_t value) {
+  _internal_set_target_uid(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  // @@protoc_insertion_point(field_set:Protocol.GatewayGameAttackReq.target_uid)
+}
+inline ::uint64_t GatewayGameAttackReq::_internal_target_uid() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.target_uid_;
+}
+inline void GatewayGameAttackReq::_internal_set_target_uid(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.target_uid_ = value;
 }
 
 #ifdef __GNUC__

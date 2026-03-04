@@ -5,7 +5,8 @@
 Monster::Monster(uint64_t id, NavMesh* navmesh)
     : monster_id_(id), state_(MonsterState::IDLE), navmesh_(navmesh),
     target_user_id_(0), path_index_(0),
-    hp_(100), max_hp_(100), attack_power_(15), // 기본 공격력 15
+    hp_(100), max_hp_(100), attack_power_(15), // 기본 공격력 15,
+    defense_power_(10), // 기본 방어력 10
     attack_range_(0.5f), attack_cooldown_(2.0f), attack_timer_(2.0f) { // 첫 타격은 즉시 때리도록 타이머를 꽉 채워둠
     position_ = { 0.0f, 0.0f, 0.0f };
 }

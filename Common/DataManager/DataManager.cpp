@@ -1,4 +1,4 @@
-#include "DataManager.h"
+﻿#include "DataManager.h"
 #include "MonsterDataManager.h"
 
 #include <boost/property_tree/ptree.hpp>

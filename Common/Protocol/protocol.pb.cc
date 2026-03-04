@@ -339,6 +339,34 @@ struct GatewayGameLeaveReqDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 GatewayGameLeaveReqDefaultTypeInternal _GatewayGameLeaveReq_default_instance_;
 
+inline constexpr GatewayGameAttackReq::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        account_id_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        target_uid_{::uint64_t{0u}} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR GatewayGameAttackReq::GatewayGameAttackReq(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(GatewayGameAttackReq_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct GatewayGameAttackReqDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR GatewayGameAttackReqDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~GatewayGameAttackReqDefaultTypeInternal() {}
+  union {
+    GatewayGameAttackReq _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 GatewayGameAttackReqDefaultTypeInternal _GatewayGameAttackReq_default_instance_;
+
 inline constexpr GatewayConnectRes::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -740,6 +768,13 @@ const ::uint32_t
         5,
         0,
         1,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::Protocol::GatewayGameAttackReq, _impl_._has_bits_),
+        5, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::Protocol::GatewayGameAttackReq, _impl_.account_id_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::GatewayGameAttackReq, _impl_.target_uid_),
+        0,
+        1,
 };
 
 static const ::_pbi::MigrationSchema
@@ -763,6 +798,7 @@ static const ::_pbi::MigrationSchema
         {128, sizeof(::Protocol::GameGatewayMoveRes)},
         {143, sizeof(::Protocol::GatewayGameLeaveReq)},
         {148, sizeof(::Protocol::GameGatewayAttackRes)},
+        {163, sizeof(::Protocol::GatewayGameAttackReq)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::Protocol::_Heartbeat_default_instance_._instance,
@@ -784,6 +820,7 @@ static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::Protocol::_GameGatewayMoveRes_default_instance_._instance,
     &::Protocol::_GatewayGameLeaveReq_default_instance_._instance,
     &::Protocol::_GameGatewayAttackRes_default_instance_._instance,
+    &::Protocol::_GatewayGameAttackReq_default_instance_._instance,
 };
 const char descriptor_table_protodef_protocol_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
@@ -819,37 +856,39 @@ const char descriptor_table_protodef_protocol_2eproto[] ABSL_ATTRIBUTE_SECTION_V
     "\022\024\n\014attacker_uid\030\001 \001(\004\022\022\n\ntarget_uid\030\002 \001"
     "(\004\022\016\n\006damage\030\003 \001(\005\022\030\n\020target_remain_hp\030\004"
     " \001(\005\022\032\n\022target_account_ids\030\005 \003(\t\022\031\n\021targ"
-    "et_account_id\030\006 \001(\t*\303\005\n\010PacketID\022\017\n\013PKT_"
-    "UNKNOWN\020\000\022\036\n\032PKT_CLIENT_LOGIN_LOGIN_REQ\020"
-    "\001\022\036\n\032PKT_LOGIN_CLIENT_LOGIN_RES\020\002\022\037\n\033PKT"
-    "_CLIENT_SERVER_HEARTBEAT\020\007\022%\n!PKT_CLIENT"
-    "_LOGIN_WORLD_SELECT_REQ\020\n\022%\n!PKT_LOGIN_C"
-    "LIENT_WORLD_SELECT_RES\020\013\022\"\n\036PKT_CLIENT_G"
-    "ATEWAY_CONNECT_REQ\020\024\022\"\n\036PKT_GATEWAY_CLIE"
-    "NT_CONNECT_RES\020\025\022\037\n\033PKT_CLIENT_GATEWAY_C"
-    "HAT_REQ\020\026\022\037\n\033PKT_GATEWAY_CLIENT_CHAT_RES"
-    "\020\027\022\037\n\033PKT_CLIENT_GATEWAY_MOVE_REQ\020\030\022\037\n\033P"
-    "KT_GATEWAY_CLIENT_MOVE_RES\020\031\022!\n\035PKT_CLIE"
-    "NT_GATEWAY_ATTACK_REQ\020\032\022!\n\035PKT_GATEWAY_C"
-    "LIENT_ATTACK_RES\020\033\022\037\n\032PKT_LOGIN_WORLD_SE"
-    "LECT_REQ\020\362\007\022\037\n\032PKT_WORLD_LOGIN_SELECT_RE"
-    "S\020\363\007\022\036\n\031PKT_GATEWAY_GAME_MOVE_REQ\020\200\010\022\036\n\031"
-    "PKT_GAME_GATEWAY_MOVE_RES\020\201\010\022\037\n\032PKT_GATE"
-    "WAY_GAME_LEAVE_REQ\020\202\010\022 \n\033PKT_GATEWAY_GAM"
-    "E_ATTACK_REQ\020\203\010\022 \n\033PKT_GAME_GATEWAY_ATTA"
-    "CK_RES\020\204\010b\006proto3"
+    "et_account_id\030\006 \001(\t\">\n\024GatewayGameAttack"
+    "Req\022\022\n\naccount_id\030\001 \001(\t\022\022\n\ntarget_uid\030\002 "
+    "\001(\004*\303\005\n\010PacketID\022\017\n\013PKT_UNKNOWN\020\000\022\036\n\032PKT"
+    "_CLIENT_LOGIN_LOGIN_REQ\020\001\022\036\n\032PKT_LOGIN_C"
+    "LIENT_LOGIN_RES\020\002\022\037\n\033PKT_CLIENT_SERVER_H"
+    "EARTBEAT\020\007\022%\n!PKT_CLIENT_LOGIN_WORLD_SEL"
+    "ECT_REQ\020\n\022%\n!PKT_LOGIN_CLIENT_WORLD_SELE"
+    "CT_RES\020\013\022\"\n\036PKT_CLIENT_GATEWAY_CONNECT_R"
+    "EQ\020\024\022\"\n\036PKT_GATEWAY_CLIENT_CONNECT_RES\020\025"
+    "\022\037\n\033PKT_CLIENT_GATEWAY_CHAT_REQ\020\026\022\037\n\033PKT"
+    "_GATEWAY_CLIENT_CHAT_RES\020\027\022\037\n\033PKT_CLIENT"
+    "_GATEWAY_MOVE_REQ\020\030\022\037\n\033PKT_GATEWAY_CLIEN"
+    "T_MOVE_RES\020\031\022!\n\035PKT_CLIENT_GATEWAY_ATTAC"
+    "K_REQ\020\032\022!\n\035PKT_GATEWAY_CLIENT_ATTACK_RES"
+    "\020\033\022\037\n\032PKT_LOGIN_WORLD_SELECT_REQ\020\362\007\022\037\n\032P"
+    "KT_WORLD_LOGIN_SELECT_RES\020\363\007\022\036\n\031PKT_GATE"
+    "WAY_GAME_MOVE_REQ\020\200\010\022\036\n\031PKT_GAME_GATEWAY"
+    "_MOVE_RES\020\201\010\022\037\n\032PKT_GATEWAY_GAME_LEAVE_R"
+    "EQ\020\202\010\022 \n\033PKT_GATEWAY_GAME_ATTACK_REQ\020\203\010\022"
+    " \n\033PKT_GAME_GATEWAY_ATTACK_RES\020\204\010b\006proto"
+    "3"
 };
 static ::absl::once_flag descriptor_table_protocol_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_protocol_2eproto = {
     false,
     false,
-    2017,
+    2081,
     descriptor_table_protodef_protocol_2eproto,
     "protocol.proto",
     &descriptor_table_protocol_2eproto_once,
     nullptr,
     0,
-    19,
+    20,
     schemas,
     file_default_instances,
     TableStruct_protocol_2eproto::offsets,
@@ -7125,6 +7164,315 @@ void GameGatewayAttackRes::InternalSwap(GameGatewayAttackRes* PROTOBUF_RESTRICT 
 }
 
 ::google::protobuf::Metadata GameGatewayAttackRes::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class GatewayGameAttackReq::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<GatewayGameAttackReq>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_._has_bits_);
+};
+
+GatewayGameAttackReq::GatewayGameAttackReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, GatewayGameAttackReq_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.GatewayGameAttackReq)
+}
+PROTOBUF_NDEBUG_INLINE GatewayGameAttackReq::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::Protocol::GatewayGameAttackReq& from_msg)
+      : _has_bits_{from._has_bits_},
+        _cached_size_{0},
+        account_id_(arena, from.account_id_) {}
+
+GatewayGameAttackReq::GatewayGameAttackReq(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const GatewayGameAttackReq& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, GatewayGameAttackReq_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  GatewayGameAttackReq* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  _impl_.target_uid_ = from._impl_.target_uid_;
+
+  // @@protoc_insertion_point(copy_constructor:Protocol.GatewayGameAttackReq)
+}
+PROTOBUF_NDEBUG_INLINE GatewayGameAttackReq::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0},
+        account_id_(arena) {}
+
+inline void GatewayGameAttackReq::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  _impl_.target_uid_ = {};
+}
+GatewayGameAttackReq::~GatewayGameAttackReq() {
+  // @@protoc_insertion_point(destructor:Protocol.GatewayGameAttackReq)
+  SharedDtor(*this);
+}
+inline void GatewayGameAttackReq::SharedDtor(MessageLite& self) {
+  GatewayGameAttackReq& this_ = static_cast<GatewayGameAttackReq&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.account_id_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL GatewayGameAttackReq::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) GatewayGameAttackReq(arena);
+}
+constexpr auto GatewayGameAttackReq::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(GatewayGameAttackReq),
+                                            alignof(GatewayGameAttackReq));
+}
+constexpr auto GatewayGameAttackReq::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_GatewayGameAttackReq_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &GatewayGameAttackReq::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<GatewayGameAttackReq>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &GatewayGameAttackReq::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<GatewayGameAttackReq>(), &GatewayGameAttackReq::ByteSizeLong,
+              &GatewayGameAttackReq::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_._cached_size_),
+          false,
+      },
+      &GatewayGameAttackReq::kDescriptorMethods,
+      &descriptor_table_protocol_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull GatewayGameAttackReq_class_data_ =
+        GatewayGameAttackReq::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+GatewayGameAttackReq::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&GatewayGameAttackReq_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(GatewayGameAttackReq_class_data_.tc_table);
+  return GatewayGameAttackReq_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<1, 2, 0, 48, 2>
+GatewayGameAttackReq::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_._has_bits_),
+    0, // no _extensions_
+    2, 8,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967292,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    2,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    GatewayGameAttackReq_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::Protocol::GatewayGameAttackReq>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    // uint64 target_uid = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(GatewayGameAttackReq, _impl_.target_uid_), 1>(),
+     {16, 1, 0,
+      PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_.target_uid_)}},
+    // string account_id = 1;
+    {::_pbi::TcParser::FastUS1,
+     {10, 0, 0,
+      PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_.account_id_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // string account_id = 1;
+    {PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_.account_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // uint64 target_uid = 2;
+    {PROTOBUF_FIELD_OFFSET(GatewayGameAttackReq, _impl_.target_uid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+  }},
+  // no aux_entries
+  {{
+    "\35\12\0\0\0\0\0\0"
+    "Protocol.GatewayGameAttackReq"
+    "account_id"
+  }},
+};
+PROTOBUF_NOINLINE void GatewayGameAttackReq::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.GatewayGameAttackReq)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    _impl_.account_id_.ClearNonDefaultToEmpty();
+  }
+  _impl_.target_uid_ = ::uint64_t{0u};
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL GatewayGameAttackReq::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const GatewayGameAttackReq& this_ = static_cast<const GatewayGameAttackReq&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL GatewayGameAttackReq::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const GatewayGameAttackReq& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.GatewayGameAttackReq)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // string account_id = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (!this_._internal_account_id().empty()) {
+      const ::std::string& _s = this_._internal_account_id();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "Protocol.GatewayGameAttackReq.account_id");
+      target = stream->WriteStringMaybeAliased(1, _s, target);
+    }
+  }
+
+  // uint64 target_uid = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (this_._internal_target_uid() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          2, this_._internal_target_uid(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.GatewayGameAttackReq)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t GatewayGameAttackReq::ByteSizeLong(const MessageLite& base) {
+  const GatewayGameAttackReq& this_ = static_cast<const GatewayGameAttackReq&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t GatewayGameAttackReq::ByteSizeLong() const {
+  const GatewayGameAttackReq& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:Protocol.GatewayGameAttackReq)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+    // string account_id = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!this_._internal_account_id().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_account_id());
+      }
+    }
+    // uint64 target_uid = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (this_._internal_target_uid() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_target_uid());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void GatewayGameAttackReq::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<GatewayGameAttackReq*>(&to_msg);
+  auto& from = static_cast<const GatewayGameAttackReq&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.GatewayGameAttackReq)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!from._internal_account_id().empty()) {
+        _this->_internal_set_account_id(from._internal_account_id());
+      } else {
+        if (_this->_impl_.account_id_.IsDefault()) {
+          _this->_internal_set_account_id("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (from._internal_target_uid() != 0) {
+        _this->_impl_.target_uid_ = from._impl_.target_uid_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void GatewayGameAttackReq::CopyFrom(const GatewayGameAttackReq& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:Protocol.GatewayGameAttackReq)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void GatewayGameAttackReq::InternalSwap(GatewayGameAttackReq* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.account_id_, &other->_impl_.account_id_, arena);
+  swap(_impl_.target_uid_, other->_impl_.target_uid_);
+}
+
+::google::protobuf::Metadata GatewayGameAttackReq::GetMetadata() const {
   return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
 }
 // @@protoc_insertion_point(namespace_scope)

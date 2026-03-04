@@ -368,6 +368,24 @@ void Handle_GameGatewayAttackRes(std::shared_ptr<GameConnection>& session, char*
     }
 }
 
+// [클라이언트 -> 게이트웨이] 유저가 'a' 키를 눌러 공격 패킷을 보냈을 때
+void Handle_AttackReq(std::shared_ptr<ClientSession>& session, char* payload, uint16_t payloadSize) {
+    Protocol::AttackReq req;
+    if (req.ParseFromArray(payload, payloadSize)) {
+
+        // GameServer로 S2S 토스 (내 Account ID를 담아서 쏩니다)
+        if (g_gameConnection) {
+            Protocol::GatewayGameAttackReq s2s_req;
+            s2s_req.set_account_id(session->GetAccountId());
+
+            // 만약 클라이언트가 타겟 몬스터 ID를 안 보냈다면 0으로 보냅니다. (서버가 알아서 찾음)
+            // s2s_req.set_target_uid(req.target_uid()); 
+
+            g_gameConnection->Send(Protocol::PKT_GATEWAY_GAME_ATTACK_REQ, s2s_req);
+        }
+    }
+}
+
 // ==========================================
 // 5. GatewayServer 수신 대기열 및 Main
 // ==========================================
@@ -394,7 +412,8 @@ int main() {
     // ==========================================
     g_gateway_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_CONNECT_REQ, Handle_GatewayConnectReq);
     g_gateway_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_CHAT_REQ, Handle_ChatReq);
-    g_gateway_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_MOVE_REQ, Handle_MoveReq);
+    g_gateway_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_MOVE_REQ, Handle_MoveReq);    
+    g_gateway_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_ATTACK_REQ, Handle_AttackReq);
 
     // ==============================================
     // [게임서버 -> 게이트웨이(S2S)] 패킷 핸들러 등록

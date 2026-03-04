@@ -9,7 +9,8 @@ enum class MonsterState {
     IDLE,
     CHASE,
     ATTACK,
-    RETURN // [추가] 타겟을 놓치면 제자리로 돌아가는 상태
+    RETURN, // 타겟을 놓치면 제자리로 돌아가는 상태
+    DEAD    // [추가] 몬스터가 유저에게 맞아 체력이 0된 상태
 };
 
 class Monster {
@@ -26,10 +27,11 @@ private:
     std::vector<Vector3> current_path_;     // 현재 이동 경로 데이터
     int path_index_;
 
-    // [전투용 스탯 추가]
+    // [전투용 스탯 추가]    
     int hp_;
     int max_hp_;
     int attack_power_;
+    int defense_power_;       // [추가] 몬스터 방어력 (예: 10)
     float attack_range_;      // 공격 사거리 (예: 1.5f)
     float attack_cooldown_;   // 공격 주기 (예: 2.0초)
     float attack_timer_;      // 쿨타임 계산용 타이머
@@ -64,6 +66,26 @@ public:
     void SetOnAttackCallback(std::function<void(uint64_t, uint64_t, int)> cb) {
         on_attack_callback_ = cb;
     }
+
+    // =========================================================
+    // ★ [추가] 유저 -> 몬스터 타격(전투)을 위한 Getter 및 사망 로직
+    // =========================================================
+    int GetHp() const { return hp_; }
+    int GetAtk() const { return attack_power_; }
+    int GetDef() const { return defense_power_; }
+
+    // 피격 시 체력 차감 함수
+    void TakeDamage(int damage) {
+        hp_ -= damage;
+        if (hp_ < 0) hp_ = 0;
+    }
+
+    // 사망 처리
+    void Die() {
+        hp_ = 0;
+        state_ = MonsterState::DEAD;
+    }
+    // =========================================================
 
     // 서버 Tick 마다 호출될 업데이트 함수 선언
     void Update(float delta_time);

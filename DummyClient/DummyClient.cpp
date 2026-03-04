@@ -183,19 +183,37 @@ int main() {
                             }
                         }
                     }
-                    // 전투(피격) 패킷 처리
+                    // 전투(피격 및 공격 결과) 패킷 처리
                     else if (h.id == Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES) {
                         Protocol::AttackRes attack_res;
                         if (attack_res.ParseFromArray(p.data(), p.size())) {
-                            if (attack_res.target_account_id() == my_id) {
+
+                            // 1. 내가 공격했는데 허공을 가른 경우 (서버가 damage를 0으로 보냄)
+                            if (attack_res.damage() == 0) {
+                                std::cout << "\n[System] 범위에 벗어나 공격에 실패했습니다.\n";
+                                std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
+                            }
+                            // 2. 내가 몬스터에게 맞은 경우
+                            else if (attack_res.target_account_id() == my_id) {
                                 my_hp = attack_res.target_remain_hp();
                                 std::cout << "\n🩸 [전투] 몬스터에게 " << attack_res.damage() << " 데미지를 입었습니다!\n";
 
                                 if (my_hp <= 0) {
                                     std::cout << "💀 체력이 0이 되어 기절했습니다...\n";
                                 }
+                                std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
+                            }
+                            // 3. 누군가(혹은 내가) 몬스터를 성공적으로 때린 경우
+                            else {
+                                std::cout << "\n[Combat] ⚔️ 몬스터(" << attack_res.target_account_id()
+                                    << ") 타격 성공! 데미지: " << attack_res.damage()
+                                    << " (남은 체력: " << attack_res.target_remain_hp() << ")\n";
 
-                                // 맞을 때마다 키보드를 누르지 않아도 즉시 깎인 체력을 UI에 반영합니다.
+                                // 몬스터의 남은 체력이 0 이하라면 쓰러졌다는 메시지를 띄웁니다
+                                if (attack_res.target_remain_hp() <= 0) {
+                                    std::cout << "🎉 [System] 💀 몬스터(" << attack_res.target_account_id() << ")가 쓰러졌습니다!\n";
+                                }
+
                                 std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
                             }
                         }
@@ -208,7 +226,7 @@ int main() {
 
 
         // 하나의 세련된 논블로킹 키보드 제어 루프로 통합
-        std::cout << "\n [액션 모드] 방향키: 이동 / Enter: 채팅 / ESC: 종료\n";
+        std::cout << "\n [액션 모드] 방향키: 이동 / a키: 공격 / Enter: 채팅 / ESC: 종료\n";
         std::cout << "--------------------------------------\n";
 
         // [사용자 입력 전용 메인 루프 (액션/채팅 모드 제어)]
@@ -252,12 +270,18 @@ int main() {
                         chat_req.set_msg(AnsiToUtf8(input));
                         SendPacket(socket, Protocol::PKT_CLIENT_GATEWAY_CHAT_REQ, chat_req);
                     }
-                    std::cout << "[액션 모드] 방향키: 이동 / Enter: 채팅 / ESC: 종료\n";
+                    std::cout << "[액션 모드] 방향키: 이동 / a키: 공격 / Enter: 채팅 / ESC: 종료\n";
                 }
                 // 3. ESC 키 (27) 누름 -> 프로그램 종료
                 else if (key == 27) {
                     std::cout << "\n[DummyClient] 접속을 종료합니다.\n";
                     break;
+                }
+                else if (key == 'a' || key == 'A' || key == 'ㅁ') {
+                    Protocol::AttackReq req;
+                    req.set_target_uid(0); // 타겟팅은 서버가 자동으로 하므로 0을 보냅니다.
+
+                    SendPacket(socket, Protocol::PKT_CLIENT_GATEWAY_ATTACK_REQ, req);
                 }
             }
 

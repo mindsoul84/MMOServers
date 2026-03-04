@@ -187,3 +187,11 @@ message GameGatewayAttackRes {
     repeated string target_account_ids = 5; // 이펙트를 볼 주변(AOI) 유저들
     string target_account_id = 6; // 클라이언트에게 누구 맞았는지 알려주기 위한 필드 추가
 }
+
+// ---------------------------------------------------------
+// [추가] 유저 -> 몬스터 타격(전투) 요청 패킷 (S2S)
+// ---------------------------------------------------------
+message GatewayGameAttackReq {
+  string account_id = 1;     // 공격을 요청한 유저의 ID
+  uint64 target_uid = 2;     // (선택) 클라이언트가 명시한 타겟 몬스터 UID
+}

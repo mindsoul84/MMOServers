@@ -48,12 +48,18 @@ std::unique_ptr<Zone> g_zone;
 
 // ★ AI 연동을 위한 전역 변수
 NavMesh g_navMesh;
+
+// GameServer.cpp 상단에 g_monsters를 extern 혹은 직접 접근할 수 있도록 준비합니다.
 std::vector<std::shared_ptr<Monster>> g_monsters;
 
 struct PlayerInfo {
     uint64_t uid;
     float x, y;
     int hp = 100;
+
+    // [추가] 유저의 기본 공격력과 방어력 세팅
+    int atk = 30;
+    int def = 5;
 };
 
 std::unordered_map<std::string, PlayerInfo> g_playerMap;  // account_id -> PlayerInfo
@@ -264,6 +270,95 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
     });
 }
 
+// [게이트웨이 -> 게임서버] 유저의 공격 요청 처리
+void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t size) {
+    Protocol::GatewayGameAttackReq s2s_req;
+    if (s2s_req.ParseFromArray(payload, size)) {
+
+        std::string account_id = s2s_req.account_id();
+        auto it_player = g_playerMap.find(account_id);
+        if (it_player == g_playerMap.end()) return;
+
+        PlayerInfo& player = it_player->second;
+
+        // ==========================================================
+        // 1. 타겟 몬스터 탐색 (기획: 내 위치 기준 1칸 이내의 몬스터)
+        // ==========================================================
+        std::shared_ptr<Monster> target_monster = nullptr;
+        float min_dist = 1.5f; // 대각선(1.414)을 고려한 1칸 허용 범위
+
+        for (auto& mon : g_monsters) {
+            if (mon->GetState() == MonsterState::DEAD) continue; // 죽은 몬스터는 때릴 수 없음
+
+            float dx = player.x - mon->GetPosition().x;
+            float dy = player.y - mon->GetPosition().y;
+            float dist = std::sqrt(dx * dx + dy * dy);
+
+            // 1칸 이내에 있으면서, '가장 가까운' 몬스터를 타겟으로 잡습니다.
+            if (dist <= min_dist) {
+                target_monster = mon;
+                min_dist = dist;
+            }
+        }
+
+        if (!target_monster) {
+            // 허공에 칼질함 (사거리 내에 몬스터가 없음)
+            Protocol::GameGatewayAttackRes fail_res;
+            fail_res.set_attacker_uid(player.uid);
+            fail_res.set_damage(0);
+            fail_res.add_target_account_ids(account_id); // 나에게만 몰래 실패를 알려줌
+
+            BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, fail_res);
+            return;
+        }
+
+        // ==========================================================
+        // 2. 데미지 연산 (공격력 - 방어력)
+        // ==========================================================
+        int damage = player.atk - target_monster->GetDef();
+        if (damage < 1) damage = 1; // 최소 1의 데미지는 무조건 들어감 (방어력이 너무 높을 때 보정)
+
+        target_monster->TakeDamage(damage);
+
+        std::cout << "[Combat] ⚔️ 유저(" << account_id << ")가 몬스터(ID:"
+            << target_monster->GetId() << ") 공격! 데미지: " << damage
+            << ", 몬스터 남은 체력: " << target_monster->GetHp() << "\n";
+
+        // ==========================================================
+        // 3. 전투 결과를 주변 유저(AOI)에게 브로드캐스팅
+        // ==========================================================
+        Protocol::GameGatewayAttackRes s2s_res;
+        s2s_res.set_attacker_uid(player.uid);
+        s2s_res.set_target_uid(target_monster->GetId());
+        s2s_res.set_target_account_id("MONSTER_" + std::to_string(target_monster->GetId()));
+        s2s_res.set_damage(damage);
+        s2s_res.set_target_remain_hp(target_monster->GetHp());
+
+        auto aoi_uids = g_zone->GetPlayersInAOI(player.x, player.y);
+        for (uint64_t uid : aoi_uids) {
+            auto target_acc = g_uidToAccount.find(uid);
+            if (target_acc != g_uidToAccount.end()) {
+                s2s_res.add_target_account_ids(target_acc->second);
+            }
+        }
+
+        // 기존에 만들어두신 Gateway로 브로드캐스트하는 함수 호출
+        BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
+
+        // ==========================================================
+        // 4. 몬스터 사망 처리
+        // ==========================================================
+        if (target_monster->GetHp() <= 0) {
+            std::cout << "[System] 💀 몬스터(ID:" << target_monster->GetId() << ")가 쓰러졌습니다!\n";
+            target_monster->Die();
+
+            // TODO: 경험치 획득, 아이템 드랍, 몬스터 시체 제거 및 몇 분 뒤 리스폰 로직
+            // g_zone->LeaveZone(target_monster->GetId());
+        }
+    }
+}
+
+
 // ==========================================
 // 3. GameNetworkServer: 9000번 포트에서 Gateway의 접속(Accept) 대기
 // ==========================================
@@ -349,6 +444,7 @@ int main() {
     // ★ 디스패처 등록
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ, Handle_GatewayGameMoveReq);
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, Handle_GatewayGameLeaveReq);
+    g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_ATTACK_REQ, Handle_GatewayGameAttackReq);
     
     try {
         //boost::asio::io_context io_context;
