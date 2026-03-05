@@ -10,6 +10,8 @@
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
 
+#include "../Common/MemoryPool.h"
+
 #pragma pack(push, 1)
 struct PacketHeader {
     uint16_t size;
@@ -60,7 +62,7 @@ public:
     }
 
     void Send(uint16_t pktId, const google::protobuf::Message& msg) {
-        // 소켓이 안 열려있으면 쏘지 않음 (크래시 방지)
+        // (안전 장치: 소켓이 닫혀있으면 무시)
         if (!socket_.is_open()) return;
 
         std::string payload;
@@ -69,14 +71,30 @@ public:
         header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
         header.id = pktId;
 
-        auto send_buf = std::make_shared<std::vector<char>>(header.size);
-        memcpy(send_buf->data(), &header, sizeof(PacketHeader));
-        memcpy(send_buf->data() + sizeof(PacketHeader), payload.data(), payload.size());
+        // =========================================================
+        // ★ 1. 풀에서 버퍼 대여 (new 없음)
+        SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
 
+        // ★ 2. shared_ptr에 '커스텀 딜리터'를 달아서 포장
+        // 이렇게 하면 send_buf가 소멸될 때 메모리 해제(delete) 대신 Pool.Release()가 자동 호출됩니다!
+        std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
+        // =========================================================
+
+        // 3. 빌려온 버퍼에 데이터 복사
+        memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
+        memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
+
+        // 4. 비동기 전송
         auto self(shared_from_this());
-        boost::asio::async_write(socket_, boost::asio::buffer(*send_buf),
+        // 주의: buffer_.data()에서 딱 header.size 만큼만 잘라서 보냅니다.
+        boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
             [this, self, send_buf](boost::system::error_code ec, std::size_t) {
-                if (ec) std::cerr << "[Gateway] GameServer로 S2S 패킷 전송 실패\n";
+                // 이 콜백 함수가 끝나는 순간 send_buf의 수명이 다하면서
+                // 우리가 만든 SendBufferDeleter가 작동하여 버퍼가 큐로 쏙! 반납됩니다.
+                if (ec) {
+                    // 에러 로깅 (필요 시)
+                    std::cerr << "[Gateway] GameServer로 S2S 패킷 전송 실패\n";
+                }
             });
     }
 

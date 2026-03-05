@@ -1,5 +1,5 @@
 ﻿#include "DBManager.h"
-#include "ConfigManager.h"
+#include "..\ConfigManager.h"
 
 bool DBManager::Connect() {
     SQLRETURN retcode;
