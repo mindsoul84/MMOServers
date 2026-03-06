@@ -1,5 +1,6 @@
 ﻿#include "DBManager.h"
 #include "..\ConfigManager.h"
+#include <iostream>
 
 bool DBManager::Connect() {
     SQLRETURN retcode;
@@ -71,4 +72,54 @@ void DBManager::PrintError(SQLSMALLINT handleType, SQLHANDLE handle) {
 
     SQLGetDiagRecW(handleType, handle, 1, sqlState, &nativeError, message, SQL_MAX_MESSAGE_LENGTH, &textLength);
     std::wcerr << L"SQL Error State: " << sqlState << L", Message: " << message << L"\n";
+}
+
+// ★ [추가] 로그인 검증 및 자동 가입 로직
+LoginResult DBManager::ProcessLogin(const std::string& id, const std::string& pw, int input_type) {
+    if (!hdbc_) return LoginResult::DB_ERROR; // 연결 상태 확인
+
+    SQLHSTMT stmt;
+    if (SQLAllocHandle(SQL_HANDLE_STMT, hdbc_, &stmt) != SQL_SUCCESS) {
+        return LoginResult::DB_ERROR;
+    }
+
+    // 1. 계정 존재 여부 및 비밀번호 조회
+    std::string query = "SELECT password FROM Accounts WHERE account_id = '" + id + "'";
+    SQLExecDirectA(stmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+
+    SQLCHAR db_pw[256] = { 0 };
+    SQLLEN cb_pw = 0;
+
+    SQLRETURN ret = SQLFetch(stmt);
+    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+        // [계정이 존재함] -> 비밀번호 대조
+        SQLGetData(stmt, 1, SQL_C_CHAR, db_pw, sizeof(db_pw), &cb_pw);
+        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+
+        std::string stored_pw(reinterpret_cast<char*>(db_pw));
+        if (stored_pw == pw) {
+            return LoginResult::SUCCESS; // 비밀번호 일치
+        }
+        else {
+            return LoginResult::WRONG_PASSWORD; // 비밀번호 불일치
+        }
+    }
+    else {
+        // 2. [계정이 없음] -> 자동 회원가입(INSERT) 처리
+        SQLFreeHandle(SQL_HANDLE_STMT, stmt); // 기존 핸들러 닫기
+        SQLAllocHandle(SQL_HANDLE_STMT, hdbc_, &stmt); // 새 핸들러 열기
+
+        // input_type을 std::to_string()으로 감싸서 문자열로 변환해 줍니다!
+        std::string insert_query = "INSERT INTO Accounts (account_id, password, input) VALUES ('" + id + "', '" + pw + "', " + std::to_string(input_type) + ")";
+        ret = SQLExecDirectA(stmt, (SQLCHAR*)insert_query.c_str(), SQL_NTS);
+
+        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+
+        if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+            return LoginResult::NEW_REGISTERED; // 가입 완료
+        }
+        else {
+            return LoginResult::DB_ERROR; // DB 에러
+        }
+    }
 }

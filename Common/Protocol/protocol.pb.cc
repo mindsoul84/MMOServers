@@ -239,9 +239,7 @@ inline constexpr LoginReq::Impl_::Impl_(
         password_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        level_(
-            &::google::protobuf::internal::fixed_address_empty_string,
-            ::_pbi::ConstantInitialized()) {}
+        input_type_{0} {}
 
 template <typename>
 PROTOBUF_CONSTEXPR LoginReq::LoginReq(::_pbi::ConstantInitialized)
@@ -611,7 +609,7 @@ const ::uint32_t
         6, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::Protocol::LoginReq, _impl_.id_),
         PROTOBUF_FIELD_OFFSET(::Protocol::LoginReq, _impl_.password_),
-        PROTOBUF_FIELD_OFFSET(::Protocol::LoginReq, _impl_.level_),
+        PROTOBUF_FIELD_OFFSET(::Protocol::LoginReq, _impl_.input_type_),
         0,
         1,
         2,
@@ -825,64 +823,64 @@ static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
 const char descriptor_table_protodef_protocol_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
     "\n\016protocol.proto\022\010Protocol\"\013\n\tHeartbeat\""
-    "7\n\010LoginReq\022\n\n\002id\030\001 \001(\t\022\020\n\010password\030\002 \001("
-    "\t\022\r\n\005level\030\003 \001(\t\"\033\n\010LoginRes\022\017\n\007success\030"
-    "\001 \001(\010\"\"\n\016WorldSelectReq\022\020\n\010world_id\030\001 \001("
-    "\005\"b\n\016WorldSelectRes\022\017\n\007success\030\001 \001(\010\022\022\n\n"
-    "gateway_ip\030\002 \001(\t\022\024\n\014gateway_port\030\003 \001(\005\022\025"
-    "\n\rsession_token\030\004 \001(\t\">\n\021GatewayConnectR"
-    "eq\022\022\n\naccount_id\030\001 \001(\t\022\025\n\rsession_token\030"
-    "\002 \001(\t\"$\n\021GatewayConnectRes\022\017\n\007success\030\001 "
-    "\001(\010\"\026\n\007ChatReq\022\013\n\003msg\030\001 \001(\t\"*\n\007ChatRes\022\022"
-    "\n\naccount_id\030\001 \001(\t\022\013\n\003msg\030\002 \001(\t\"7\n\007MoveR"
-    "eq\022\t\n\001x\030\001 \001(\002\022\t\n\001y\030\002 \001(\002\022\t\n\001z\030\003 \001(\002\022\013\n\003y"
-    "aw\030\004 \001(\002\"K\n\007MoveRes\022\022\n\naccount_id\030\001 \001(\t\022"
-    "\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030"
-    "\005 \001(\002\"\037\n\tAttackReq\022\022\n\ntarget_uid\030\001 \001(\004\"f"
-    "\n\tAttackRes\022\024\n\014attacker_uid\030\001 \001(\004\022\031\n\021tar"
-    "get_account_id\030\002 \001(\t\022\016\n\006damage\030\003 \001(\005\022\030\n\020"
-    "target_remain_hp\030\004 \001(\005\";\n\023LoginWorldSele"
-    "ctReq\022\022\n\naccount_id\030\001 \001(\t\022\020\n\010world_id\030\002 "
-    "\001(\005\"{\n\023WorldLoginSelectRes\022\022\n\naccount_id"
-    "\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\022\n\ngateway_ip\030\003 "
-    "\001(\t\022\024\n\014gateway_port\030\004 \001(\005\022\025\n\rsession_tok"
-    "en\030\005 \001(\t\"V\n\022GatewayGameMoveReq\022\022\n\naccoun"
-    "t_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 "
-    "\001(\002\022\013\n\003yaw\030\005 \001(\002\"r\n\022GameGatewayMoveRes\022\022"
-    "\n\naccount_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002"
-    "\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\022\032\n\022target_accou"
-    "nt_ids\030\006 \003(\t\")\n\023GatewayGameLeaveReq\022\022\n\na"
-    "ccount_id\030\001 \001(\t\"\241\001\n\024GameGatewayAttackRes"
-    "\022\024\n\014attacker_uid\030\001 \001(\004\022\022\n\ntarget_uid\030\002 \001"
-    "(\004\022\016\n\006damage\030\003 \001(\005\022\030\n\020target_remain_hp\030\004"
-    " \001(\005\022\032\n\022target_account_ids\030\005 \003(\t\022\031\n\021targ"
-    "et_account_id\030\006 \001(\t\">\n\024GatewayGameAttack"
-    "Req\022\022\n\naccount_id\030\001 \001(\t\022\022\n\ntarget_uid\030\002 "
-    "\001(\004*\303\005\n\010PacketID\022\017\n\013PKT_UNKNOWN\020\000\022\036\n\032PKT"
-    "_CLIENT_LOGIN_LOGIN_REQ\020\001\022\036\n\032PKT_LOGIN_C"
-    "LIENT_LOGIN_RES\020\002\022\037\n\033PKT_CLIENT_SERVER_H"
-    "EARTBEAT\020\007\022%\n!PKT_CLIENT_LOGIN_WORLD_SEL"
-    "ECT_REQ\020\n\022%\n!PKT_LOGIN_CLIENT_WORLD_SELE"
-    "CT_RES\020\013\022\"\n\036PKT_CLIENT_GATEWAY_CONNECT_R"
-    "EQ\020\024\022\"\n\036PKT_GATEWAY_CLIENT_CONNECT_RES\020\025"
-    "\022\037\n\033PKT_CLIENT_GATEWAY_CHAT_REQ\020\026\022\037\n\033PKT"
-    "_GATEWAY_CLIENT_CHAT_RES\020\027\022\037\n\033PKT_CLIENT"
-    "_GATEWAY_MOVE_REQ\020\030\022\037\n\033PKT_GATEWAY_CLIEN"
-    "T_MOVE_RES\020\031\022!\n\035PKT_CLIENT_GATEWAY_ATTAC"
-    "K_REQ\020\032\022!\n\035PKT_GATEWAY_CLIENT_ATTACK_RES"
-    "\020\033\022\037\n\032PKT_LOGIN_WORLD_SELECT_REQ\020\362\007\022\037\n\032P"
-    "KT_WORLD_LOGIN_SELECT_RES\020\363\007\022\036\n\031PKT_GATE"
-    "WAY_GAME_MOVE_REQ\020\200\010\022\036\n\031PKT_GAME_GATEWAY"
-    "_MOVE_RES\020\201\010\022\037\n\032PKT_GATEWAY_GAME_LEAVE_R"
-    "EQ\020\202\010\022 \n\033PKT_GATEWAY_GAME_ATTACK_REQ\020\203\010\022"
-    " \n\033PKT_GAME_GATEWAY_ATTACK_RES\020\204\010b\006proto"
-    "3"
+    "<\n\010LoginReq\022\n\n\002id\030\001 \001(\t\022\020\n\010password\030\002 \001("
+    "\t\022\022\n\ninput_type\030\003 \001(\005\"\033\n\010LoginRes\022\017\n\007suc"
+    "cess\030\001 \001(\010\"\"\n\016WorldSelectReq\022\020\n\010world_id"
+    "\030\001 \001(\005\"b\n\016WorldSelectRes\022\017\n\007success\030\001 \001("
+    "\010\022\022\n\ngateway_ip\030\002 \001(\t\022\024\n\014gateway_port\030\003 "
+    "\001(\005\022\025\n\rsession_token\030\004 \001(\t\">\n\021GatewayCon"
+    "nectReq\022\022\n\naccount_id\030\001 \001(\t\022\025\n\rsession_t"
+    "oken\030\002 \001(\t\"$\n\021GatewayConnectRes\022\017\n\007succe"
+    "ss\030\001 \001(\010\"\026\n\007ChatReq\022\013\n\003msg\030\001 \001(\t\"*\n\007Chat"
+    "Res\022\022\n\naccount_id\030\001 \001(\t\022\013\n\003msg\030\002 \001(\t\"7\n\007"
+    "MoveReq\022\t\n\001x\030\001 \001(\002\022\t\n\001y\030\002 \001(\002\022\t\n\001z\030\003 \001(\002"
+    "\022\013\n\003yaw\030\004 \001(\002\"K\n\007MoveRes\022\022\n\naccount_id\030\001"
+    " \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n"
+    "\003yaw\030\005 \001(\002\"\037\n\tAttackReq\022\022\n\ntarget_uid\030\001 "
+    "\001(\004\"f\n\tAttackRes\022\024\n\014attacker_uid\030\001 \001(\004\022\031"
+    "\n\021target_account_id\030\002 \001(\t\022\016\n\006damage\030\003 \001("
+    "\005\022\030\n\020target_remain_hp\030\004 \001(\005\";\n\023LoginWorl"
+    "dSelectReq\022\022\n\naccount_id\030\001 \001(\t\022\020\n\010world_"
+    "id\030\002 \001(\005\"{\n\023WorldLoginSelectRes\022\022\n\naccou"
+    "nt_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\022\n\ngateway_"
+    "ip\030\003 \001(\t\022\024\n\014gateway_port\030\004 \001(\005\022\025\n\rsessio"
+    "n_token\030\005 \001(\t\"V\n\022GatewayGameMoveReq\022\022\n\na"
+    "ccount_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n"
+    "\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\"r\n\022GameGatewayMove"
+    "Res\022\022\n\naccount_id\030\001 \001(\t\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030"
+    "\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\022\032\n\022target_"
+    "account_ids\030\006 \003(\t\")\n\023GatewayGameLeaveReq"
+    "\022\022\n\naccount_id\030\001 \001(\t\"\241\001\n\024GameGatewayAtta"
+    "ckRes\022\024\n\014attacker_uid\030\001 \001(\004\022\022\n\ntarget_ui"
+    "d\030\002 \001(\004\022\016\n\006damage\030\003 \001(\005\022\030\n\020target_remain"
+    "_hp\030\004 \001(\005\022\032\n\022target_account_ids\030\005 \003(\t\022\031\n"
+    "\021target_account_id\030\006 \001(\t\">\n\024GatewayGameA"
+    "ttackReq\022\022\n\naccount_id\030\001 \001(\t\022\022\n\ntarget_u"
+    "id\030\002 \001(\004*\303\005\n\010PacketID\022\017\n\013PKT_UNKNOWN\020\000\022\036"
+    "\n\032PKT_CLIENT_LOGIN_LOGIN_REQ\020\001\022\036\n\032PKT_LO"
+    "GIN_CLIENT_LOGIN_RES\020\002\022\037\n\033PKT_CLIENT_SER"
+    "VER_HEARTBEAT\020\007\022%\n!PKT_CLIENT_LOGIN_WORL"
+    "D_SELECT_REQ\020\n\022%\n!PKT_LOGIN_CLIENT_WORLD"
+    "_SELECT_RES\020\013\022\"\n\036PKT_CLIENT_GATEWAY_CONN"
+    "ECT_REQ\020\024\022\"\n\036PKT_GATEWAY_CLIENT_CONNECT_"
+    "RES\020\025\022\037\n\033PKT_CLIENT_GATEWAY_CHAT_REQ\020\026\022\037"
+    "\n\033PKT_GATEWAY_CLIENT_CHAT_RES\020\027\022\037\n\033PKT_C"
+    "LIENT_GATEWAY_MOVE_REQ\020\030\022\037\n\033PKT_GATEWAY_"
+    "CLIENT_MOVE_RES\020\031\022!\n\035PKT_CLIENT_GATEWAY_"
+    "ATTACK_REQ\020\032\022!\n\035PKT_GATEWAY_CLIENT_ATTAC"
+    "K_RES\020\033\022\037\n\032PKT_LOGIN_WORLD_SELECT_REQ\020\362\007"
+    "\022\037\n\032PKT_WORLD_LOGIN_SELECT_RES\020\363\007\022\036\n\031PKT"
+    "_GATEWAY_GAME_MOVE_REQ\020\200\010\022\036\n\031PKT_GAME_GA"
+    "TEWAY_MOVE_RES\020\201\010\022\037\n\032PKT_GATEWAY_GAME_LE"
+    "AVE_REQ\020\202\010\022 \n\033PKT_GATEWAY_GAME_ATTACK_RE"
+    "Q\020\203\010\022 \n\033PKT_GAME_GATEWAY_ATTACK_RES\020\204\010b\006"
+    "proto3"
 };
 static ::absl::once_flag descriptor_table_protocol_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_protocol_2eproto = {
     false,
     false,
-    2081,
+    2086,
     descriptor_table_protodef_protocol_2eproto,
     "protocol.proto",
     &descriptor_table_protocol_2eproto_once,
@@ -1037,8 +1035,7 @@ PROTOBUF_NDEBUG_INLINE LoginReq::Impl_::Impl_(
       : _has_bits_{from._has_bits_},
         _cached_size_{0},
         id_(arena, from.id_),
-        password_(arena, from.password_),
-        level_(arena, from.level_) {}
+        password_(arena, from.password_) {}
 
 LoginReq::LoginReq(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -1053,6 +1050,7 @@ LoginReq::LoginReq(
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  _impl_.input_type_ = from._impl_.input_type_;
 
   // @@protoc_insertion_point(copy_constructor:Protocol.LoginReq)
 }
@@ -1061,11 +1059,11 @@ PROTOBUF_NDEBUG_INLINE LoginReq::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
       : _cached_size_{0},
         id_(arena),
-        password_(arena),
-        level_(arena) {}
+        password_(arena) {}
 
 inline void LoginReq::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
+  _impl_.input_type_ = {};
 }
 LoginReq::~LoginReq() {
   // @@protoc_insertion_point(destructor:Protocol.LoginReq)
@@ -1080,7 +1078,6 @@ inline void LoginReq::SharedDtor(MessageLite& self) {
   ABSL_DCHECK(this_.GetArena() == nullptr);
   this_._impl_.id_.Destroy();
   this_._impl_.password_.Destroy();
-  this_._impl_.level_.Destroy();
   this_._impl_.~Impl_();
 }
 
@@ -1127,7 +1124,7 @@ LoginReq::GetClassData() const {
   return LoginReq_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 3, 0, 41, 2>
+const ::_pbi::TcParseTable<2, 3, 0, 36, 2>
 LoginReq::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(LoginReq, _impl_._has_bits_),
@@ -1155,10 +1152,10 @@ LoginReq::_table_ = {
     {::_pbi::TcParser::FastUS1,
      {18, 1, 0,
       PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.password_)}},
-    // string level = 3;
-    {::_pbi::TcParser::FastUS1,
-     {26, 2, 0,
-      PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.level_)}},
+    // int32 input_type = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(LoginReq, _impl_.input_type_), 2>(),
+     {24, 2, 0,
+      PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.input_type_)}},
   }}, {{
     65535, 65535
   }}, {{
@@ -1166,16 +1163,15 @@ LoginReq::_table_ = {
     {PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     // string password = 2;
     {PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.password_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-    // string level = 3;
-    {PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.level_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+    // int32 input_type = 3;
+    {PROTOBUF_FIELD_OFFSET(LoginReq, _impl_.input_type_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
   }},
   // no aux_entries
   {{
-    "\21\2\10\5\0\0\0\0"
+    "\21\2\10\0\0\0\0\0"
     "Protocol.LoginReq"
     "id"
     "password"
-    "level"
   }},
 };
 PROTOBUF_NOINLINE void LoginReq::Clear() {
@@ -1186,17 +1182,15 @@ PROTOBUF_NOINLINE void LoginReq::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       _impl_.id_.ClearNonDefaultToEmpty();
     }
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       _impl_.password_.ClearNonDefaultToEmpty();
     }
-    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
-      _impl_.level_.ClearNonDefaultToEmpty();
-    }
   }
+  _impl_.input_type_ = 0;
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
@@ -1240,13 +1234,12 @@ PROTOBUF_NOINLINE void LoginReq::Clear() {
     }
   }
 
-  // string level = 3;
+  // int32 input_type = 3;
   if (CheckHasBit(cached_has_bits, 0x00000004U)) {
-    if (!this_._internal_level().empty()) {
-      const ::std::string& _s = this_._internal_level();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "Protocol.LoginReq.level");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+    if (this_._internal_input_type() != 0) {
+      target =
+          ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<3>(
+              stream, this_._internal_input_type(), target);
     }
   }
 
@@ -1290,11 +1283,11 @@ PROTOBUF_NOINLINE void LoginReq::Clear() {
                                         this_._internal_password());
       }
     }
-    // string level = 3;
+    // int32 input_type = 3;
     if (CheckHasBit(cached_has_bits, 0x00000004U)) {
-      if (!this_._internal_level().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                        this_._internal_level());
+      if (this_._internal_input_type() != 0) {
+        total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+            this_._internal_input_type());
       }
     }
   }
@@ -1336,12 +1329,8 @@ void LoginReq::MergeImpl(::google::protobuf::MessageLite& to_msg,
       }
     }
     if (CheckHasBit(cached_has_bits, 0x00000004U)) {
-      if (!from._internal_level().empty()) {
-        _this->_internal_set_level(from._internal_level());
-      } else {
-        if (_this->_impl_.level_.IsDefault()) {
-          _this->_internal_set_level("");
-        }
+      if (from._internal_input_type() != 0) {
+        _this->_impl_.input_type_ = from._impl_.input_type_;
       }
     }
   }
@@ -1366,7 +1355,7 @@ void LoginReq::InternalSwap(LoginReq* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) 
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.id_, &other->_impl_.id_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.password_, &other->_impl_.password_, arena);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.level_, &other->_impl_.level_, arena);
+  swap(_impl_.input_type_, other->_impl_.input_type_);
 }
 
 ::google::protobuf::Metadata LoginReq::GetMetadata() const {

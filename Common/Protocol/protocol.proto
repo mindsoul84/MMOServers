@@ -64,7 +64,7 @@ message Heartbeat { }
 message LoginReq {
   string id = 1;
   string password = 2;
-  string level = 3;
+  int32 input_type = 3;    // 0: random, 1:input
 }
 
 message LoginRes {

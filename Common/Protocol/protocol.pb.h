@@ -1892,7 +1892,7 @@ class LoginReq final : public ::google::protobuf::Message
   enum : int {
     kIdFieldNumber = 1,
     kPasswordFieldNumber = 2,
-    kLevelFieldNumber = 3,
+    kInputTypeFieldNumber = 3,
   };
   // string id = 1;
   void clear_id() ;
@@ -1924,19 +1924,14 @@ class LoginReq final : public ::google::protobuf::Message
   ::std::string* PROTOBUF_NONNULL _internal_mutable_password();
 
   public:
-  // string level = 3;
-  void clear_level() ;
-  const ::std::string& level() const;
-  template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_level(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_level();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_level();
-  void set_allocated_level(::std::string* PROTOBUF_NULLABLE value);
+  // int32 input_type = 3;
+  void clear_input_type() ;
+  ::int32_t input_type() const;
+  void set_input_type(::int32_t value);
 
   private:
-  const ::std::string& _internal_level() const;
-  PROTOBUF_ALWAYS_INLINE void _internal_set_level(const ::std::string& value);
-  ::std::string* PROTOBUF_NONNULL _internal_mutable_level();
+  ::int32_t _internal_input_type() const;
+  void _internal_set_input_type(::int32_t value);
 
   public:
   // @@protoc_insertion_point(class_scope:Protocol.LoginReq)
@@ -1944,7 +1939,7 @@ class LoginReq final : public ::google::protobuf::Message
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
   static const ::google::protobuf::internal::TcParseTable<2, 3,
-                                   0, 41,
+                                   0, 36,
                                    2>
       _table_;
 
@@ -1967,7 +1962,7 @@ class LoginReq final : public ::google::protobuf::Message
     ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::internal::ArenaStringPtr id_;
     ::google::protobuf::internal::ArenaStringPtr password_;
-    ::google::protobuf::internal::ArenaStringPtr level_;
+    ::int32_t input_type_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -4669,69 +4664,29 @@ inline void LoginReq::set_allocated_password(::std::string* PROTOBUF_NULLABLE va
   // @@protoc_insertion_point(field_set_allocated:Protocol.LoginReq.password)
 }
 
-// string level = 3;
-inline void LoginReq::clear_level() {
+// int32 input_type = 3;
+inline void LoginReq::clear_input_type() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.level_.ClearToEmpty();
+  _impl_.input_type_ = 0;
   ClearHasBit(_impl_._has_bits_[0],
                   0x00000004U);
 }
-inline const ::std::string& LoginReq::level() const
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_get:Protocol.LoginReq.level)
-  return _internal_level();
+inline ::int32_t LoginReq::input_type() const {
+  // @@protoc_insertion_point(field_get:Protocol.LoginReq.input_type)
+  return _internal_input_type();
 }
-template <typename Arg_, typename... Args_>
-PROTOBUF_ALWAYS_INLINE void LoginReq::set_level(Arg_&& arg, Args_... args) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
+inline void LoginReq::set_input_type(::int32_t value) {
+  _internal_set_input_type(value);
   SetHasBit(_impl_._has_bits_[0], 0x00000004U);
-  _impl_.level_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:Protocol.LoginReq.level)
+  // @@protoc_insertion_point(field_set:Protocol.LoginReq.input_type)
 }
-inline ::std::string* PROTOBUF_NONNULL LoginReq::mutable_level()
-    ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
-  ::std::string* _s = _internal_mutable_level();
-  // @@protoc_insertion_point(field_mutable:Protocol.LoginReq.level)
-  return _s;
-}
-inline const ::std::string& LoginReq::_internal_level() const {
+inline ::int32_t LoginReq::_internal_input_type() const {
   ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.level_.Get();
+  return _impl_.input_type_;
 }
-inline void LoginReq::_internal_set_level(const ::std::string& value) {
+inline void LoginReq::_internal_set_input_type(::int32_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.level_.Set(value, GetArena());
-}
-inline ::std::string* PROTOBUF_NONNULL LoginReq::_internal_mutable_level() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  return _impl_.level_.Mutable( GetArena());
-}
-inline ::std::string* PROTOBUF_NULLABLE LoginReq::release_level() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  // @@protoc_insertion_point(field_release:Protocol.LoginReq.level)
-  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000004U)) {
-    return nullptr;
-  }
-  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
-  auto* released = _impl_.level_.Release();
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
-    _impl_.level_.Set("", GetArena());
-  }
-  return released;
-}
-inline void LoginReq::set_allocated_level(::std::string* PROTOBUF_NULLABLE value) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000004U);
-  } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
-  }
-  _impl_.level_.SetAllocated(value, GetArena());
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.level_.IsDefault()) {
-    _impl_.level_.Set("", GetArena());
-  }
-  // @@protoc_insertion_point(field_set_allocated:Protocol.LoginReq.level)
+  _impl_.input_type_ = value;
 }
 
 // -------------------------------------------------------------------

@@ -11,6 +11,14 @@
 #include <sql.h>
 #include <sqlext.h>
 
+// 클래스 외부(상단)에 로그인 결과 Enum 추가
+enum class LoginResult {
+    SUCCESS,
+    NEW_REGISTERED,
+    WRONG_PASSWORD,
+    DB_ERROR
+};
+
 class DBManager {
 private:
     SQLHENV henv_ = SQL_NULL_HENV; // 환경 핸들
@@ -37,4 +45,7 @@ public:
 
     // 에러 출력 헬퍼 함수
     void PrintError(SQLSMALLINT handleType, SQLHANDLE handle);
+
+    // DBManager 클래스 내부에 함수 원형 추가
+    LoginResult ProcessLogin(const std::string& id, const std::string& pw, int input_type);
 };

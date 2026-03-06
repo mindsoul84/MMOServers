@@ -227,21 +227,57 @@ void Handle_LoginReq(std::shared_ptr<Session>& session, char* payload, uint16_t 
     Protocol::LoginReq login_req;
     if (login_req.ParseFromArray(payload, payloadSize)) {
         std::string req_id = login_req.id();
+        std::string req_pw = login_req.password(); // 클라이언트가 보낸 비밀번호
+        int req_input_type = login_req.input_type();
         Protocol::LoginRes login_res;
-        {
+
+        bool is_auth_success = false;
+
+        // 1. DB 연동 모드일 경우 DB 검증
+        if (ConfigManager::GetInstance().UseDB()) {
+            LoginResult result = DBManager::GetInstance().ProcessLogin(req_id, req_pw, req_input_type);
+
+            if (result == LoginResult::SUCCESS) {
+                std::cout << "[DB] 계정 인증 성공 (" << req_id << ")\n";
+                is_auth_success = true;
+            }
+            else if (result == LoginResult::NEW_REGISTERED) {
+                std::cout << "[DB] 신규 계정 자동 가입 완료 (" << req_id << ")\n";
+                is_auth_success = true;
+            }
+            else if (result == LoginResult::WRONG_PASSWORD) {
+                std::cout << "🚨 [DB] 로그인 실패: 비밀번호 불일치 (" << req_id << ")\n";
+                is_auth_success = false;
+            }
+            else {
+                std::cout << "🚨 [DB] 로그인 실패: DB 쿼리 오류\n";
+                is_auth_success = false;
+            }
+        }
+        else {
+            // DB 미사용 모드면 무조건 패스
+            is_auth_success = true;
+        }
+
+        // 2. 인증 성공 시 중복 접속 체크 후 세션 등록
+        if (is_auth_success) {
             std::lock_guard<std::mutex> lock(g_loginMutex);
             if (g_loggedInUsers.find(req_id) != g_loggedInUsers.end()) {
                 login_res.set_success(false);
-                std::cout << "[로그인 거부] 이미 접속 중: " << req_id << "\n";
+                std::cout << "[로그인 거부] 이미 접속 중인 계정: " << req_id << "\n";
             }
             else {
                 g_loggedInUsers.insert(req_id);
-                g_sessionMap[req_id] = session; // 맵에 세션 저장
+                g_sessionMap[req_id] = session;
                 session->SetLoggedInId(req_id);
                 login_res.set_success(true);
-                std::cout << "[로그인 승인] ID: " << req_id << " 접속 완료.\n";
+                std::cout << "[로그인 승인] ID: " << req_id << " 인게임 진입 허용.\n";
             }
         }
+        else {
+            login_res.set_success(false);
+        }
+
         session->Send(Protocol::PKT_LOGIN_CLIENT_LOGIN_RES, login_res);
     }
 }
