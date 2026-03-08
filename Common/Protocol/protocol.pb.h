@@ -125,6 +125,10 @@ class MoveRes;
 struct MoveResDefaultTypeInternal;
 extern MoveResDefaultTypeInternal _MoveRes_default_instance_;
 extern const ::google::protobuf::internal::ClassDataFull MoveRes_class_data_;
+class WorldGameMonsterBuffReq;
+struct WorldGameMonsterBuffReqDefaultTypeInternal;
+extern WorldGameMonsterBuffReqDefaultTypeInternal _WorldGameMonsterBuffReq_default_instance_;
+extern const ::google::protobuf::internal::ClassDataFull WorldGameMonsterBuffReq_class_data_;
 class WorldLoginSelectRes;
 struct WorldLoginSelectResDefaultTypeInternal;
 extern WorldLoginSelectResDefaultTypeInternal _WorldLoginSelectRes_default_instance_;
@@ -164,6 +168,7 @@ enum PacketID : int {
   PKT_GATEWAY_CLIENT_ATTACK_RES = 27,
   PKT_LOGIN_WORLD_SELECT_REQ = 1010,
   PKT_WORLD_LOGIN_SELECT_RES = 1011,
+  PKT_WORLD_GAME_MONSTER_BUFF = 1012,
   PKT_GATEWAY_GAME_MOVE_REQ = 1024,
   PKT_GAME_GATEWAY_MOVE_RES = 1025,
   PKT_GATEWAY_GAME_LEAVE_REQ = 1026,
@@ -880,6 +885,220 @@ class WorldLoginSelectRes final : public ::google::protobuf::Message
 };
 
 extern const ::google::protobuf::internal::ClassDataFull WorldLoginSelectRes_class_data_;
+// -------------------------------------------------------------------
+
+class WorldGameMonsterBuffReq final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:Protocol.WorldGameMonsterBuffReq) */ {
+ public:
+  inline WorldGameMonsterBuffReq() : WorldGameMonsterBuffReq(nullptr) {}
+  ~WorldGameMonsterBuffReq() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(WorldGameMonsterBuffReq* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(WorldGameMonsterBuffReq));
+  }
+#endif
+
+  template <typename = void>
+  explicit PROTOBUF_CONSTEXPR WorldGameMonsterBuffReq(::google::protobuf::internal::ConstantInitialized);
+
+  inline WorldGameMonsterBuffReq(const WorldGameMonsterBuffReq& from) : WorldGameMonsterBuffReq(nullptr, from) {}
+  inline WorldGameMonsterBuffReq(WorldGameMonsterBuffReq&& from) noexcept
+      : WorldGameMonsterBuffReq(nullptr, ::std::move(from)) {}
+  inline WorldGameMonsterBuffReq& operator=(const WorldGameMonsterBuffReq& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline WorldGameMonsterBuffReq& operator=(WorldGameMonsterBuffReq&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const WorldGameMonsterBuffReq& default_instance() {
+    return *reinterpret_cast<const WorldGameMonsterBuffReq*>(
+        &_WorldGameMonsterBuffReq_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages = 15;
+  friend void swap(WorldGameMonsterBuffReq& a, WorldGameMonsterBuffReq& b) { a.Swap(&b); }
+  inline void Swap(WorldGameMonsterBuffReq* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(WorldGameMonsterBuffReq* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  WorldGameMonsterBuffReq* PROTOBUF_NONNULL New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<WorldGameMonsterBuffReq>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const WorldGameMonsterBuffReq& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const WorldGameMonsterBuffReq& from) { WorldGameMonsterBuffReq::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  ::size_t ByteSizeLong() const final;
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(WorldGameMonsterBuffReq* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "Protocol.WorldGameMonsterBuffReq"; }
+
+  explicit WorldGameMonsterBuffReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  WorldGameMonsterBuffReq(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const WorldGameMonsterBuffReq& from);
+  WorldGameMonsterBuffReq(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, WorldGameMonsterBuffReq&& from) noexcept
+      : WorldGameMonsterBuffReq(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_();
+
+  ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kMinUidFieldNumber = 1,
+    kMaxUidFieldNumber = 2,
+    kAddHpFieldNumber = 3,
+  };
+  // uint64 min_uid = 1;
+  void clear_min_uid() ;
+  ::uint64_t min_uid() const;
+  void set_min_uid(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_min_uid() const;
+  void _internal_set_min_uid(::uint64_t value);
+
+  public:
+  // uint64 max_uid = 2;
+  void clear_max_uid() ;
+  ::uint64_t max_uid() const;
+  void set_max_uid(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_max_uid() const;
+  void _internal_set_max_uid(::uint64_t value);
+
+  public:
+  // int32 add_hp = 3;
+  void clear_add_hp() ;
+  ::int32_t add_hp() const;
+  void set_add_hp(::int32_t value);
+
+  private:
+  ::int32_t _internal_add_hp() const;
+  void _internal_set_add_hp(::int32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:Protocol.WorldGameMonsterBuffReq)
+ private:
+  class _Internal;
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<2, 3,
+                                   0, 0,
+                                   2>
+      _table_;
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const WorldGameMonsterBuffReq& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::uint64_t min_uid_;
+    ::uint64_t max_uid_;
+    ::int32_t add_hp_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_protocol_2eproto;
+};
+
+extern const ::google::protobuf::internal::ClassDataFull WorldGameMonsterBuffReq_class_data_;
 // -------------------------------------------------------------------
 
 class MoveRes final : public ::google::protobuf::Message
@@ -2161,7 +2380,7 @@ class GatewayGameMoveReq final : public ::google::protobuf::Message
     return *reinterpret_cast<const GatewayGameMoveReq*>(
         &_GatewayGameMoveReq_default_instance_);
   }
-  static constexpr int kIndexInFileMessages = 15;
+  static constexpr int kIndexInFileMessages = 16;
   friend void swap(GatewayGameMoveReq& a, GatewayGameMoveReq& b) { a.Swap(&b); }
   inline void Swap(GatewayGameMoveReq* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -2404,7 +2623,7 @@ class GatewayGameLeaveReq final : public ::google::protobuf::Message
     return *reinterpret_cast<const GatewayGameLeaveReq*>(
         &_GatewayGameLeaveReq_default_instance_);
   }
-  static constexpr int kIndexInFileMessages = 17;
+  static constexpr int kIndexInFileMessages = 18;
   friend void swap(GatewayGameLeaveReq& a, GatewayGameLeaveReq& b) { a.Swap(&b); }
   inline void Swap(GatewayGameLeaveReq* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -2599,7 +2818,7 @@ class GatewayGameAttackReq final : public ::google::protobuf::Message
     return *reinterpret_cast<const GatewayGameAttackReq*>(
         &_GatewayGameAttackReq_default_instance_);
   }
-  static constexpr int kIndexInFileMessages = 19;
+  static constexpr int kIndexInFileMessages = 20;
   friend void swap(GatewayGameAttackReq& a, GatewayGameAttackReq& b) { a.Swap(&b); }
   inline void Swap(GatewayGameAttackReq* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3208,7 +3427,7 @@ class GameGatewayMoveRes final : public ::google::protobuf::Message
     return *reinterpret_cast<const GameGatewayMoveRes*>(
         &_GameGatewayMoveRes_default_instance_);
   }
-  static constexpr int kIndexInFileMessages = 16;
+  static constexpr int kIndexInFileMessages = 17;
   friend void swap(GameGatewayMoveRes& a, GameGatewayMoveRes& b) { a.Swap(&b); }
   inline void Swap(GameGatewayMoveRes* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -3475,7 +3694,7 @@ class GameGatewayAttackRes final : public ::google::protobuf::Message
     return *reinterpret_cast<const GameGatewayAttackRes*>(
         &_GameGatewayAttackRes_default_instance_);
   }
-  static constexpr int kIndexInFileMessages = 18;
+  static constexpr int kIndexInFileMessages = 19;
   friend void swap(GameGatewayAttackRes& a, GameGatewayAttackRes& b) { a.Swap(&b); }
   inline void Swap(GameGatewayAttackRes* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -6084,6 +6303,85 @@ inline void WorldLoginSelectRes::set_allocated_session_token(::std::string* PROT
     _impl_.session_token_.Set("", GetArena());
   }
   // @@protoc_insertion_point(field_set_allocated:Protocol.WorldLoginSelectRes.session_token)
+}
+
+// -------------------------------------------------------------------
+
+// WorldGameMonsterBuffReq
+
+// uint64 min_uid = 1;
+inline void WorldGameMonsterBuffReq::clear_min_uid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.min_uid_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000001U);
+}
+inline ::uint64_t WorldGameMonsterBuffReq::min_uid() const {
+  // @@protoc_insertion_point(field_get:Protocol.WorldGameMonsterBuffReq.min_uid)
+  return _internal_min_uid();
+}
+inline void WorldGameMonsterBuffReq::set_min_uid(::uint64_t value) {
+  _internal_set_min_uid(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_set:Protocol.WorldGameMonsterBuffReq.min_uid)
+}
+inline ::uint64_t WorldGameMonsterBuffReq::_internal_min_uid() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.min_uid_;
+}
+inline void WorldGameMonsterBuffReq::_internal_set_min_uid(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.min_uid_ = value;
+}
+
+// uint64 max_uid = 2;
+inline void WorldGameMonsterBuffReq::clear_max_uid() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.max_uid_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000002U);
+}
+inline ::uint64_t WorldGameMonsterBuffReq::max_uid() const {
+  // @@protoc_insertion_point(field_get:Protocol.WorldGameMonsterBuffReq.max_uid)
+  return _internal_max_uid();
+}
+inline void WorldGameMonsterBuffReq::set_max_uid(::uint64_t value) {
+  _internal_set_max_uid(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  // @@protoc_insertion_point(field_set:Protocol.WorldGameMonsterBuffReq.max_uid)
+}
+inline ::uint64_t WorldGameMonsterBuffReq::_internal_max_uid() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.max_uid_;
+}
+inline void WorldGameMonsterBuffReq::_internal_set_max_uid(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.max_uid_ = value;
+}
+
+// int32 add_hp = 3;
+inline void WorldGameMonsterBuffReq::clear_add_hp() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.add_hp_ = 0;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000004U);
+}
+inline ::int32_t WorldGameMonsterBuffReq::add_hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.WorldGameMonsterBuffReq.add_hp)
+  return _internal_add_hp();
+}
+inline void WorldGameMonsterBuffReq::set_add_hp(::int32_t value) {
+  _internal_set_add_hp(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  // @@protoc_insertion_point(field_set:Protocol.WorldGameMonsterBuffReq.add_hp)
+}
+inline ::int32_t WorldGameMonsterBuffReq::_internal_add_hp() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.add_hp_;
+}
+inline void WorldGameMonsterBuffReq::_internal_set_add_hp(::int32_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.add_hp_ = value;
 }
 
 // -------------------------------------------------------------------

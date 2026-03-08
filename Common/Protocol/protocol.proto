@@ -46,6 +46,9 @@ enum PacketID {
   PKT_LOGIN_WORLD_SELECT_REQ = 1010;   // Login -> World
   PKT_WORLD_LOGIN_SELECT_RES = 1011;   // World -> Login
 
+  // [World Server <-> Game Server]
+  PKT_WORLD_GAME_MONSTER_BUFF = 1012;
+
   // [Gateway Server <-> Game Server]
   PKT_GATEWAY_GAME_MOVE_REQ = 1024;    // Gateway -> Game (이동 패킷 토스)
   PKT_GAME_GATEWAY_MOVE_RES = 1025;    // Game -> Gateway (브로드캐스트 지시)
@@ -151,6 +154,15 @@ message WorldLoginSelectRes {
   string gateway_ip = 3;
   int32 gateway_port = 4;
   string session_token = 5;
+}
+
+// ---------------------------------------------------------
+// World Server -> Game Server
+// ---------------------------------------------------------
+message WorldGameMonsterBuffReq {
+  uint64 min_uid = 1; // 시작 몬스터 UID (예: 10000)
+  uint64 max_uid = 2; // 끝 몬스터 UID (예: 10002)
+  int32 add_hp = 3;   // 올려줄 체력량
 }
 
 // ---------------------------------------------------------

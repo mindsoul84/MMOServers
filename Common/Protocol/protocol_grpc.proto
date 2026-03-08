@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package Protocol;
+
+// =========================================================
+// [gRPC] 외부 Admin Tool -> World Server 통신용
+// =========================================================
+
+// API 요청 데이터
+message BuffMonsterHpAdminReq {
+  int32 add_hp = 1; // 얼마를 올려줄 것인가?
+}
+
+// API 응답 데이터
+message BuffMonsterHpAdminRes {
+  bool success = 1;
+  string message = 2; // 처리 결과 메시지
+}
+
+// =========================================================
+// [gRPC Service] 엔드포인트(API) 정의
+// =========================================================
+service AdminAPI {
+  // /monster_hp API 엔드포인트 역할을 수행합니다.
+  rpc BuffMonsterHp (BuffMonsterHpAdminReq) returns (BuffMonsterHpAdminRes);
+}

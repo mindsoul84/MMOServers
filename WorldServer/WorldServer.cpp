@@ -8,6 +8,10 @@
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
 
+// gRPC 관련 헤더
+#include <grpcpp/grpcpp.h>
+#include "protocol_grpc.grpc.pb.h"
+
 #include "../Common/MemoryPool.h"
 
 #pragma pack(push, 1)
@@ -18,12 +22,23 @@ struct PacketHeader {
 #pragma pack(pop)
 
 using boost::asio::ip::tcp;
+using grpc::Server;
+using grpc::ServerBuilder;
+using grpc::ServerContext;
+using grpc::Status;
+using Protocol::BuffMonsterHpAdminReq;
+using Protocol::BuffMonsterHpAdminRes;
+using Protocol::AdminAPI;
 
 // ==========================================
 // S2S(Server-to-Server) 통신 세션
 // ==========================================
 class ServerSession;
 PacketDispatcher<ServerSession> g_s2s_dispatcher;
+
+// ★ [추가] 연결된 하위 서버(GameServer, LoginServer) 세션들을 관리할 전역 리스트
+std::vector<std::shared_ptr<ServerSession>> g_serverSessions;
+std::mutex g_serverSessionMutex;
 
 class ServerSession : public std::enable_shared_from_this<ServerSession> {
 private:
@@ -156,13 +171,85 @@ private:
             [this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
                     // 로그 수정: 하위 서버가 아니라 동등한 피어 서버 접속으로 명시
-                    std::cout << "[WorldServer] S2S 통신: LoginServer 접속 확인!\n";
-                    std::make_shared<ServerSession>(std::move(socket))->start();
+                    std::cout << "[WorldServer] S2S 통신: LoginServer/GameServer 접속 확인!\n";
+                    
+                    // ★ [수정] 세션을 생성하고 리스트에 추가한 뒤 시작시킵니다!
+                    auto new_session = std::make_shared<ServerSession>(std::move(socket));
+                    {
+                        std::lock_guard<std::mutex> lock(g_serverSessionMutex);
+                        g_serverSessions.push_back(new_session);
+                    }
+                    new_session->start();
                 }
                 do_accept();
             });
     }
 };
+
+
+constexpr uint64_t MIN_MON_ID = 10000;
+constexpr uint64_t MAX_MON_ID = 100000;
+
+// =========================================================
+// ★ [추가] gRPC API 서비스 구현체
+// 운영 툴에서 /monster_hp API를 쏘면 이 안의 코드가 실행됩니다!
+// =========================================================
+class AdminServiceImpl final : public AdminAPI::Service {
+    Status BuffMonsterHp(ServerContext* context, const BuffMonsterHpAdminReq* request, BuffMonsterHpAdminRes* reply) override {
+        int32_t add_hp = request->add_hp();
+        std::cout << "\n[Admin API] 🚨 외부 운영툴로부터 몬스터 체력 버프(+" << add_hp << ") 요청 수신!\n";
+
+        // ★ 입력값 유효성 검사 (0 이하의 값이 들어오면 즉시 차단!)
+        if (add_hp <= 0) {
+            std::cerr << "\n[Admin API] ❌ 잘못된 버프 요청 차단 (요청된 add_hp: " << add_hp << ")\n";
+
+            // gRPC 표준 에러 코드(INVALID_ARGUMENT)와 함께 Postman으로 에러를 튕겨냅니다.
+            return Status(grpc::StatusCode::INVALID_ARGUMENT, "add_hp must be strictly greater than 0");
+        }
+
+        // 1. GameServer에게 보낼 S2S 패킷 세팅
+        Protocol::WorldGameMonsterBuffReq buff_req;
+        buff_req.set_min_uid(MIN_MON_ID);
+        buff_req.set_max_uid(MAX_MON_ID);
+        buff_req.set_add_hp(add_hp);
+
+        // 2. ★ [수정] 연결된 서버 패킷 전송
+        int send_count = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_serverSessionMutex);
+            for (auto& session : g_serverSessions) {
+                if (session) {
+                    session->Send(Protocol::PKT_WORLD_GAME_MONSTER_BUFF, buff_req);
+                    send_count++;
+                }
+            }
+        }
+        std::cout << "▶ [WorldServer] 연결된 GameServer로 몬스터 버프 지시 패킷 전송 완료!\n";
+
+        // 4. API 요청자(Postman)에게 성공 응답 반환
+        reply->set_success(true);
+        reply->set_message("GameServer로 n번 몬스터 체력 버프 명령을 성공적으로 전달했습니다.");
+
+        return Status::OK;
+    }
+};
+
+// ★ [추가] gRPC 서버를 실행하고 대기하는 함수
+void RunGrpcServer() {
+    std::string server_address("0.0.0.0:50051");
+    AdminServiceImpl service;
+
+    ServerBuilder builder;
+    // 인증(SSL/TLS) 없이 평문으로 포트를 엽니다 (개발용)
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+
+    std::unique_ptr<Server> server(builder.BuildAndStart());
+    std::cout << "🌐 [WorldServer] Admin gRPC 서버 가동 시작 (Port: 50051)\n";
+
+    // 이 함수는 서버가 꺼질 때까지 여기서 무한 대기(블로킹)합니다.
+    server->Wait();
+}
 
 int main() {
     SetConsoleOutputCP(CP_UTF8);
@@ -175,6 +262,12 @@ int main() {
         WorldServer server(io_context, 7000);
         std::cout << "[WorldServer] 월드 중앙 서버 가동 시작 (Port: 7000) Created by Jeong Shin Young\n";
         std::cout << "=================================================\n";
+
+        // =========================================================
+        // 메인 스레드가 블로킹 되기 전에 gRPC 서버 스레드를 띄웁니다!
+        // =========================================================
+        std::thread grpc_thread(RunGrpcServer);
+        grpc_thread.detach(); // 백그라운드에서 알아서 돌도록 메인 스레드와 분리
 
         io_context.run();
     }

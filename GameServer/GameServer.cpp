@@ -78,6 +78,10 @@ boost::asio::io_context::strand g_game_strand(g_io_context);
 class GatewaySession;
 PacketDispatcher<GatewaySession> g_s2s_gateway_dispatcher;
 
+// WorldServer와의 통신을 전담할 클래스 전방 선언 및 디스패처
+class WorldConnection;
+PacketDispatcher<WorldConnection> g_s2s_world_dispatcher;
+
 // 게이트웨이 접속 개수 카운터 (일반적으로 1개지만 확장성을 위해 유지)
 static std::atomic<int> g_connected_gateways{ 0 };
 
@@ -209,6 +213,54 @@ void BroadcastToGateways(uint16_t pktId, const google::protobuf::Message& msg)
         if (session) session->Send(pktId, msg);
     }
 }
+
+// ==========================================
+// ★ [추가] WorldServer 연결 전용 세션 클래스
+// ==========================================
+class WorldConnection : public std::enable_shared_from_this<WorldConnection> {
+private:
+    tcp::socket socket_;
+
+public:
+    WorldConnection(boost::asio::io_context& io_context)
+        : socket_(io_context) {
+    }
+
+    tcp::socket& Socket() { return socket_; }
+
+    void Start() {
+        std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다!\n";
+        DoRead();
+    }
+
+    void DoRead() {
+        auto self(shared_from_this());
+        // 1. 헤더 먼저 읽기
+        auto header = std::make_shared<PacketHeader>();
+        boost::asio::async_read(socket_, boost::asio::buffer(header.get(), sizeof(PacketHeader)),
+            [this, self, header](boost::system::error_code ec, std::size_t /*length*/) {
+                if (!ec) {
+                    // 2. 페이로드(내용) 읽기
+                    auto payload = std::make_shared<std::vector<char>>(header->size - sizeof(PacketHeader));
+                    if (!payload->empty()) {
+                        boost::asio::read(socket_, boost::asio::buffer(payload->data(), payload->size()));
+                    }
+
+                    // 3. World 전용 디스패처로 패킷 토스!                    
+                    auto session_ptr = self;    // 람다 내부의 const 문제를 피하기 위해 복사본을 만듭니다.
+                    g_s2s_world_dispatcher.Dispatch(session_ptr, header->id, payload->data(), payload->size());
+
+                    // 4. 다음 패킷 대기 (무한 루프)
+                    DoRead();
+                }
+                else {
+                    std::cerr << "[GameServer] 🚨 WorldServer와의 연결이 끊어졌습니다.\n";
+                }
+            });
+    }
+
+    // (필요 시 Send 함수도 Memory Pool을 활용하여 여기에 구현하시면 됩니다)
+};
 
 // ==========================================
 // 이동 패킷 핸들러 (Strand 적용)
@@ -400,6 +452,36 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     }
 }
 
+// World -> Game : 몬스터 버프 지시 처리 핸들러
+void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char* payload, uint16_t payloadSize) {
+    Protocol::WorldGameMonsterBuffReq req;
+    if (req.ParseFromArray(payload, payloadSize)) {
+        uint64_t min_uid = req.min_uid();
+        uint64_t max_uid = req.max_uid();
+        int32_t add_hp = req.add_hp();
+
+        std::cout << "\n🌟 [S2S 수신] WorldServer로부터 몬스터(" << min_uid << "~" << max_uid
+            << ") 체력 버프(+" << add_hp << ") 지시 수신!\n";
+
+        // =========================================================
+        // ★ [추가] 실제 몬스터 배열(g_monsters)을 순회하며 체력을 올려줍니다!
+        int buff_count = 0;
+        for (auto& mon : g_monsters) {
+            uint64_t uid = mon->GetId();
+
+            // 지정된 범위(10000~10002) 안에 있고, 살아있는 몬스터라면 버프 적용!
+            if (uid >= min_uid && uid <= max_uid) {
+                if (mon->GetState() != MonsterState::DEAD) {
+                    mon->SetHp(add_hp);
+                    buff_count++;
+                    std::cout << "  -> 몬스터[" << uid << "] 체력 증가! (현재 HP: " << mon->GetHp() << ")\n";
+                }
+            }
+        }
+        std::cout << "▶ 총 " << buff_count << "마리의 몬스터에게 버프가 적용되었습니다.\n";
+        // =========================================================
+    }
+}
 
 // ==========================================
 // 3. GameNetworkServer: 9000번 포트에서 Gateway의 접속(Accept) 대기
@@ -487,6 +569,8 @@ int main() {
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ, Handle_GatewayGameMoveReq);
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, Handle_GatewayGameLeaveReq);
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_ATTACK_REQ, Handle_GatewayGameAttackReq);
+
+    g_s2s_world_dispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_MONSTER_BUFF, Handle_WorldGameMonsterBuff);
     
     try {
         //boost::asio::io_context io_context;
@@ -494,6 +578,19 @@ int main() {
         // 1. S2S 서버 객체 생성 (포트: 9000)
         GameNetworkServer server(g_io_context, 9000);
         std::cout << "[System] 코어 게임 로직 서버 가동 (Port: 9000) Created by Jeong Shin Young\n";
+
+        // =========================================================
+        // ★ [추가] WorldServer(7000)로 능동적 연결 (Connect)
+        // 전역변수 g_io_context를 그대로 사용합니다.
+        // =========================================================
+        tcp::resolver resolver(g_io_context);
+        auto endpoints = resolver.resolve("127.0.0.1", "7000"); // WorldServer IP/Port
+        auto world_conn = std::make_shared<WorldConnection>(g_io_context);
+
+        std::cout << "[GameServer] WorldServer(7000) 연결 시도 중...\n";
+        boost::asio::connect(world_conn->Socket(), endpoints);
+        world_conn->Start(); // 비동기 수신 시작!
+        // =========================================================
 
         // 2. CPU 코어 개수에 맞춰 스레드 개수 설정
         unsigned int thread_count = std::thread::hardware_concurrency();

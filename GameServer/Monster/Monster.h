@@ -74,6 +74,8 @@ public:
     int GetAtk() const { return attack_power_; }
     int GetDef() const { return defense_power_; }
 
+    int SetHp(int par_hp) { return hp_ += par_hp; }
+
     // 피격 시 체력 차감 함수
     void TakeDamage(int damage) {
         hp_ -= damage;
