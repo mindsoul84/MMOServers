@@ -2,7 +2,13 @@
 #include "..\PathFinder\PathFinder.h"
 #include <vector>
 #include <cstdint>
-#include <functional> // [추가] 콜백 함수 사용을 위함
+#include <functional> // 콜백 함수 사용을 위함
+#include <memory>     // ★ 비동기 콜백 시 생명주기 보장을 위함
+
+/* 
+* Monster 수정 (안전망 추가) : Monster 객체가 비동기 작업 중에도 스스로 수명을 연장할 수 있도록
+* <memory>를 추가하고, std::enable_shared_from_this를 상속받게 합니다.
+*/
 
 // 몬스터의 상태 정의
 enum class MonsterState {
@@ -13,7 +19,8 @@ enum class MonsterState {
     DEAD    // [추가] 몬스터가 유저에게 맞아 체력이 0된 상태
 };
 
-class Monster {
+// ★ std::enable_shared_from_this 상속 추가 (비동기 람다 안에서 self 잡기 위함)
+class Monster : public std::enable_shared_from_this<Monster> {
 private:
     uint64_t monster_id_;
     Vector3 position_;

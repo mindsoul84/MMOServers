@@ -1,6 +1,6 @@
 #include "..\Define/Define.h"
 
-#ifdef DEF_ADD_RECASTNAVI
+#ifdef  DEF_ADD_RECASTNAVI
 #pragma once
 #include <vector>
 
@@ -28,9 +28,12 @@ public:
 
     // ★ Detour 엔진을 이용한 진짜 A* 및 Funnel 길찾기
     std::vector<Vector3> FindPath(Vector3 start, Vector3 end);
+
+    // 내부의 원본 dtNavMesh 포인터를 반환하는 Getter 함수 (변수명은 개발자님 코드에 맞게 확인해주세요!)
+    dtNavMesh* GetRawNavMesh() const { return m_navMesh; }
 };
 
-#else
+#else//DEF_ADD_RECASTNAVI
 #pragma once
 #include <vector>
 
@@ -48,4 +51,4 @@ public:
     // A* 와 Funnel을 이용하여 시작점에서 목적지까지의 경로를 반환
     std::vector<Vector3> FindPath(Vector3 start, Vector3 end);
 };
-#endif//DEF_RECASTLIB_
+#endif//DEF_ADD_RECASTNAVI

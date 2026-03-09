@@ -170,10 +170,16 @@ private:
         acceptor_.async_accept(
             [this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    // 로그 수정: 하위 서버가 아니라 동등한 피어 서버 접속으로 명시
-                    std::cout << "[WorldServer] S2S 통신: LoginServer/GameServer 접속 확인!\n";
+                    try {
+                        // ★ 접속한 상대방의 IP와 할당된 임시 포트(Ephemeral Port)를 출력합니다.
+                        auto remote_ep = socket.remote_endpoint();
+                        std::cout << "[WorldServer] S2S 통신: 새로운 서버 접속 확인! " << "[연결처: " << remote_ep.address().to_string() << ":" << remote_ep.port() << "]\n";
+                    }
+                    catch (std::exception&) {
+                        std::cout << "[WorldServer] S2S 통신: 서버 접속 확인! (엔드포인트 읽기 실패)\n";
+                    }
                     
-                    // ★ [수정] 세션을 생성하고 리스트에 추가한 뒤 시작시킵니다!
+                    // ★ 세션을 생성하고 리스트에 추가한 뒤 시작시킵니다!
                     auto new_session = std::make_shared<ServerSession>(std::move(socket));
                     {
                         std::lock_guard<std::mutex> lock(g_serverSessionMutex);

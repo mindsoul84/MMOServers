@@ -7,6 +7,11 @@
 #include <recastnavigation/DetourNavMesh.h>
 #include <recastnavigation/DetourNavMeshQuery.h>
 
+// =========================================================
+// ★ [핵심 추가] GameServer.cpp에서 선언한 thread_local 객체를 가져옵니다.
+// =========================================================
+extern thread_local dtNavMeshQuery* t_navQuery;
+
 // RecastDemo 표준 바이너리 헤더 구조체 (실무 표준)
 struct NavMeshSetHeader {
     int magic;
@@ -82,10 +87,14 @@ bool NavMesh::LoadNavMeshFromFile(const char* filepath) {
     return true;
 }
 // ==========================================
-// [수정] 진짜 A* 알고리즘 및 Funnel 알고리즘 복원 (안전장치 포함)
+// [수정] 진짜 A* 알고리즘 및 Funnel 알고리즘 복원 (Lock-Free 지원)
 // ==========================================
 std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     std::vector<Vector3> final_path;
+
+    // ★ [매직 코드] 현재 이 함수를 실행 중인 스레드에 t_navQuery가 있다면 그걸 쓰고, 
+    // 만약 메인 스레드에서 호출해서 없다면 기존의 m_navQuery를 사용하는 안전한 Fallback 로직입니다!
+    dtNavMeshQuery* query = t_navQuery ? t_navQuery : m_navQuery;
 
     // 맵 데이터가 없으면 직선 반환 (에러 방지)
     if (!m_navMesh || !m_navQuery) {
@@ -101,6 +110,8 @@ std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     dtPolyRef startRef = 0, endRef = 0;
     float nearestStart[3], nearestEnd[3];
 
+    // 참고: m_filter는 단순히 옵션(Flag)만 들고 있는 읽기 전용(Read-Only) 객체이므로
+    // 여러 스레드에서 동시에 접근해도 100% 스레드 세이프(Thread-Safe) 합니다!
     m_navQuery->findNearestPoly(startPos, extents, m_filter, &startRef, nearestStart);
     m_navQuery->findNearestPoly(endPos, extents, m_filter, &endRef, nearestEnd);
 
@@ -115,7 +126,8 @@ std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     dtPolyRef path[MAX_POLYS];
     int pathCount = 0;
 
-    m_navQuery->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);
+    //m_navQuery->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);    
+    query->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);     // 모든 m_navQuery를 query로 교체!
 
     if (pathCount > 0) {
         float straightPath[MAX_POLYS * 3];

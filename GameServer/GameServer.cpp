@@ -13,7 +13,11 @@
 #include <cstring>      // memset 사용을 위해 추가
 #include <recastnavigation/DetourNavMesh.h>         // 핵심 구조체 정의 포함
 #include <recastnavigation/DetourNavMeshBuilder.h>
-
+#include <recastnavigation/DetourNavMeshQuery.h>
+// ==========================================
+// ★ [AI 최적화] 길찾기 전용 스레드 풀 및 큐 설정
+// ==========================================
+#include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 
 #include "../Common/ConfigManager.h"
@@ -31,6 +35,15 @@
 #include "Monster/MonsterManager.h"
 #include "../Common/DataManager/DataManager.h" // 상단에 추가
 
+// 네트워크 I/O와 분리된 AI 연산 전용 컨텍스트
+boost::asio::io_context g_ai_io_context;
+
+// AI 스레드가 할 일이 없어도 종료되지 않도록 붙잡아두는 Work Guard
+auto g_ai_work_guard = boost::asio::make_work_guard(g_ai_io_context);
+
+// ★ 핵심: 스레드마다 자신만의 전용 dtNavMeshQuery를 가지게 하는 마법의 키워드 'thread_local'
+// 락(Lock) 없이 병렬 처리가 가능해집니다!
+thread_local dtNavMeshQuery* t_navQuery = nullptr;
 
 #pragma pack(push, 1)
 struct PacketHeader {
@@ -229,7 +242,13 @@ public:
     tcp::socket& Socket() { return socket_; }
 
     void Start() {
-        std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다!\n";
+        try {
+            unsigned short my_port = socket_.local_endpoint().port();
+            std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다! (내 부여된 포트: " << my_port << ")\n";
+        }
+        catch (...) {
+            std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다!\n";
+        }        
         DoRead();
     }
 
@@ -521,6 +540,33 @@ private:
     }
 };
 
+void StartAIThreadPool(int ai_thread_count = 4) {
+    std::cout << "[System] 🧠 AI 전용 비동기 스레드 풀 가동 (" << ai_thread_count << "개)...\n";
+
+    for (int i = 0; i < ai_thread_count; ++i) {
+        std::thread([i]() {
+            // 1. [스레드 시작 시점] 이 스레드 전용 길찾기 객체 할당
+            t_navQuery = dtAllocNavMeshQuery();
+
+            // g_navMesh는 읽기 전용(Read-Only)이므로 여러 스레드에서 공유해도 안전합니다.
+            // (g_navMesh.GetRawNavMesh()는 개발자님의 래핑 클래스에 맞게 수정해주세요)
+            dtStatus status = t_navQuery->init(g_navMesh.GetRawNavMesh(), 2048);
+            if (dtStatusFailed(status)) {
+                std::cerr << "[Error] AI 스레드 " << i << "번 NavMeshQuery 초기화 실패!\n";
+            }
+
+            // 2. [무한 루프] 큐에 들어오는 길찾기 작업(Job)들을 대기하고 처리합니다.
+            g_ai_io_context.run();
+
+            // 3. [스레드 종료 시점] 스레드가 꺼질 때 동적 할당 해제
+            if (t_navQuery) {
+                dtFreeNavMeshQuery(t_navQuery);
+                t_navQuery = nullptr;
+            }
+            }).detach(); // 백그라운드 스레드로 분리
+    }
+}
+
 // ==========================================
 // 4. 메인 함수: 스레드 풀 구성 및 서버 실행
 // ==========================================
@@ -564,6 +610,11 @@ int main() {
     // 3. 몬스터 스폰 및 AI 시스템 가동 (분리된 모듈 호출)
     InitMonsters();
     StartAITickThread();
+
+    // =========================================================
+    // ★ [여기에 추가!] 우리가 만든 길찾기 전담 스레드 풀(4개) 가동
+    StartAIThreadPool(4);
+    // =========================================================
     
     // ★ 디스패처 등록
     g_s2s_gateway_dispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ, Handle_GatewayGameMoveReq);

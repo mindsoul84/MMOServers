@@ -61,8 +61,16 @@ public:
     void Connect(const std::string& ip, short port) {
         tcp::resolver resolver(io_context_);
         auto endpoints = resolver.resolve(ip, std::to_string(port));
-        boost::asio::connect(socket_, endpoints);
-        std::cout << "[LoginServer] 🌐 WorldServer(S2S)에 성공적으로 연결되었습니다!\n";
+        boost::asio::connect(socket_, endpoints);        
+
+        try {
+            unsigned short my_port = socket_.local_endpoint().port();
+            std::cout << "[LoginServer] 🌐 WorldServer(S2S)에 성공적으로 연결되었습니다! (부여 포트: " << my_port << ")\n";
+        }
+        catch (...) {
+            std::cout << "[LoginServer] 🌐 WorldServer(S2S)에 성공적으로 연결되었습니다!\n";
+        }
+
         ReadHeader();
     }
 

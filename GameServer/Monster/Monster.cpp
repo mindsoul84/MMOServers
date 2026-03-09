@@ -1,5 +1,10 @@
 #include "Monster.h"
 #include <iostream>
+#include <boost/asio.hpp>   // ★ [비동기 post 사용 위함
+
+// ★ GameServer.cpp에 있는 전역 변수(스레드 풀과 메인 대기열)를 가져옵니다.
+extern boost::asio::io_context g_ai_io_context;
+extern boost::asio::io_context::strand g_game_strand;
 
 // 생성자 구현
 Monster::Monster(uint64_t id, NavMesh* navmesh)
@@ -202,30 +207,50 @@ void Monster::UpdateAttack(float delta_time) {
 }
 
 // ==========================================
-// [수정] 길찾기 계산 로직 (멈칫거림 방지)
+// [수정] 길찾기 연산 비동기 처리 (AI 스레드 풀 위임)
 // ==========================================
 void Monster::CalculatePath() {
-    if (navmesh_) {
-        current_path_ = navmesh_->FindPath(position_, target_last_pos_);
-        path_index_ = 0;
+    if (!navmesh_) return;
 
-        // ★ [핵심] Detour가 반환한 첫 번째 좌표가 '현재 내 위치'와 동일하다면 
-        // 0번째를 건너뛰고 1번째(진짜 다음 목표)부터 이동하게 하여 멈칫거림 방지!
-        if (current_path_.size() > 1) {
-            float dx = current_path_[0].x - position_.x;
-            float dy = current_path_[0].y - position_.y;
-            if (std::sqrt(dx * dx + dy * dy) < 0.1f) {
-                path_index_ = 1;
+    // 길찾기 연산 중에 몬스터가 죽어서 삭제되는 것을 막기 위해 shared_ptr 복사본(self)을 만듭니다.
+    auto self = shared_from_this();
+
+    // 현재 내 위치와 목표 위치를 람다 캡처를 위해 지역 변수로 복사합니다.
+    Vector3 start_pos = position_;
+    Vector3 end_pos = target_last_pos_;
+    NavMesh* current_nav = navmesh_;
+
+    // 3. 메인 스레드(Strand) -> AI 스레드 풀에 무거운 길찾기 작업(Job)을 던집니다.
+    boost::asio::post(g_ai_io_context, [self, start_pos, end_pos, current_nav]() {
+
+        // ----------------------------------------------------
+        // [여기는 AI 스레드 풀 내부입니다]
+        // ----------------------------------------------------
+        // 실제 연산은 여기서 일어납니다. 메인 네트워크 로직은 블로킹되지 않습니다!
+        std::vector<Vector3> result_waypoints = current_nav->FindPath(start_pos, end_pos);
+
+        // 4. 연산이 끝나면, 그 결과를 다시 메인 게임 Strand로 콜백(보고) 합니다.
+        boost::asio::post(g_game_strand, [self, result_waypoints]() {
+
+            // ----------------------------------------------------
+            // [여기는 다시 메인 게임 Strand 내부입니다]
+            // ----------------------------------------------------
+
+            // 콜백이 돌아왔는데 그 사이에 몬스터가 맞아 죽었다면 경로를 무시합니다.
+            if (self->state_ == MonsterState::DEAD) return;
+
+            // 계산된 새 경로를 적용합니다.
+            self->current_path_ = result_waypoints;
+            self->path_index_ = 0;
+
+            // 멈칫거림 방지 로직 
+            if (self->current_path_.size() > 1) {
+                float dx = self->current_path_[0].x - self->position_.x;
+                float dy = self->current_path_[0].y - self->position_.y;
+                if (std::sqrt(dx * dx + dy * dy) < 0.1f) {
+                    self->path_index_ = 1;
+                }
             }
-        }
-        //std::cout << "[Monster " << monster_id_ << "] 경로 계산 완료. 경유지 개수: " << current_path_.size() << "\n";
-
-        // [테스트 로그] A* 알고리즘이 찾아낸 꺾임점(Waypoint) 출력
-        //std::cout << "=================================================\n";
-        //std::cout << "[Monster " << monster_id_ << "] 🧠 A* & Funnel 알고리즘 회피 경로 연산 완료!\n";
-        //for (size_t i = path_index_; i < current_path_.size(); ++i) {
-        //    std::cout << "    -> [경유지 " << i << "] X: " << current_path_[i].x << ", Y: " << current_path_[i].y << "\n";
-        //}
-        //std::cout << "=================================================\n";
-    }
+            });
+        });
 }
