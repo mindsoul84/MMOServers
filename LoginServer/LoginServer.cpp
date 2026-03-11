@@ -16,6 +16,9 @@ using boost::asio::ip::tcp;
 // ==========================================
 // ★ 전역 메모리 할당
 // ==========================================
+boost::asio::io_context g_db_io_context;                              // ★ DB 전용 컨텍스트
+auto g_db_work_guard = boost::asio::make_work_guard(g_db_io_context); // ★ 종료 방지 가드
+
 std::atomic<int> g_connected_clients{ 0 };
 std::unordered_set<std::string> g_loggedInUsers;
 std::unordered_map<std::string, std::shared_ptr<Session>> g_sessionMap;
@@ -199,16 +202,6 @@ int main() {
 
     ConfigManager::GetInstance().LoadConfig("config.json");
 
-    if (ConfigManager::GetInstance().UseDB()) {
-        if (!DBManager::GetInstance().Connect()) {
-            std::cerr << "DB 연결에 실패하여 서버를 종료합니다.\n";
-            return -1;
-        }
-    }
-    else {
-        std::cout << "[System] ⚠️ config.json 설정에 따라 DB 연동을 건너뜁니다.\n";
-    }
-
     // ★ 분리된 핸들러들을 디스패처에 등록
     g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
     g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT, Handle_Heartbeat);
@@ -223,6 +216,32 @@ int main() {
 
         LoginServer server(io_context, 7777);
         std::cout << "[LoginServer] 로그인 서버 가동 시작 (Port: 7777) Created by Jeong Shin Young\n";
+        std::cout << "=================================================\n";
+
+        // =========================================================
+        // ★ DB 전담 워커 스레드 구동 (Thread-Local DB 연결)
+        // =========================================================
+        std::cout << "[System] 💾 DB 연산 전용 백그라운드 스레드 가동 (2개)...\n";
+        for (int i = 0; i < 2; ++i) {
+            std::thread([i]() {
+                // 1. 이 스레드만의 전용 DB 연결 객체 생성
+                if (ConfigManager::GetInstance().UseDB()) {
+                    t_dbManager = new DBManager();
+                    if (!t_dbManager->Connect()) {
+                        std::cerr << "🚨 [DB 스레드 " << i << "] DB 연결 실패!\n";
+                    }
+                }
+
+                // 2. 무한 대기하며 큐에 들어오는 로그인 요청(Job) 처리
+                g_db_io_context.run();
+
+                // 3. 스레드가 종료될 때 안전하게 메모리 해제
+                if (t_dbManager) {
+                    delete t_dbManager;
+                    t_dbManager = nullptr;
+                }
+                }).detach();
+        }
         std::cout << "=================================================\n";
 
         unsigned int thread_count = std::thread::hardware_concurrency();

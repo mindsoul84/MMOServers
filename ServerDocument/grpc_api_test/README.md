@@ -1,3 +1,7 @@
+\[WorldServer gRPC API Test]
+
+
+
 1.API\_Test\_Before.jpg
 
 API 호출 전 화면 입니다. 화면과 같이 기존에 몬스터 체력은 100입니다.

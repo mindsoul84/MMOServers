@@ -2,6 +2,9 @@
 #include "..\ConfigManager.h"
 #include <iostream>
 
+// ★ 전역 thread_local 변수 실제 메모리 할당 (정의)
+thread_local DBManager* t_dbManager = nullptr;
+
 bool DBManager::Connect() {
     SQLRETURN retcode;
 

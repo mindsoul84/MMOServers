@@ -22,20 +22,13 @@ enum class LoginResult {
 class DBManager {
 private:
     SQLHENV henv_ = SQL_NULL_HENV; // 환경 핸들
-    SQLHDBC hdbc_ = SQL_NULL_HDBC; // 연결 핸들
-
-    // 싱글톤 패턴
-    DBManager() = default;
-    ~DBManager() { Disconnect(); }
+    SQLHDBC hdbc_ = SQL_NULL_HDBC; // 연결 핸들    
 
 public:
-    static DBManager& GetInstance() {
-        static DBManager instance;
-        return instance;
-    }
+    // ★ 1. DBManager ODBC Thread-Local DB Connection Pool 도입: 싱글톤 삭제, 기본 생성자 public 이동
 
-    DBManager(const DBManager&) = delete;
-    DBManager& operator=(const DBManager&) = delete;
+    DBManager() = default;
+    ~DBManager() { Disconnect(); }
 
     // DB 연결 (config.json 세팅에 따라 호출됨)
     bool Connect();
@@ -49,3 +42,8 @@ public:
     // DBManager 클래스 내부에 함수 원형 추가
     LoginResult ProcessLogin(const std::string& id, const std::string& pw, int input_type);
 };
+
+// =========================================================
+// ★ 2. [핵심] 이 스레드만의 전용 DB 매니저를 가리키는 포인터 선언!
+// =========================================================
+extern thread_local DBManager* t_dbManager;

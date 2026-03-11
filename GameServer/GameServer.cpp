@@ -578,8 +578,13 @@ int main() {
     ConfigManager::GetInstance().LoadConfig("config.json");
 
     // 2. 설정에 DB 연동이 true로 되어 있다면 DB 연결 시도
-    if (ConfigManager::GetInstance().UseDB()) {
-        if (!DBManager::GetInstance().Connect()) {
+    if (ConfigManager::GetInstance().UseDB()) {        
+        // =========================================================
+        // ★ [수정] GetInstance() 대신 현재 스레드의 t_dbManager를 생성하고 연결합니다.
+        // =========================================================
+        t_dbManager = new DBManager();
+
+        if (!t_dbManager->Connect()) {
             std::cerr << "DB 연결에 실패하여 서버를 종료합니다.\n";
             return -1;
         }
