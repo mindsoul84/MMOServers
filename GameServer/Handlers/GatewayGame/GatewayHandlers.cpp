@@ -21,6 +21,16 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
         float new_x = req->x();
         float new_y = req->y();
 
+        // =========================================================
+        // ★ [버그 픽스] 맵 이탈(음수 좌표 및 최대 크기 초과) 방지 로직 
+        // 맵 크기(1000x1000) 밖으로 나가려고 하면 강제로 벽에 붙여버립니다.
+        // =========================================================
+        if (new_x < 0.0f) new_x = 0.0f;
+        if (new_y < 0.0f) new_y = 0.0f;
+        if (new_x > 1000.0f) new_x = 1000.0f; // Zone 생성 시 설정한 최대 Width
+        if (new_y > 1000.0f) new_y = 1000.0f; // Zone 생성 시 설정한 최대 Height
+        // =========================================================
+
         if (ctx_inner.playerMap.find(acc_id) == ctx_inner.playerMap.end()) {
             uint64_t new_uid = ctx_inner.uidCounter++;
             ctx_inner.playerMap[acc_id] = { new_uid, new_x, new_y };

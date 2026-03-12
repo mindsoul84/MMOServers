@@ -143,8 +143,14 @@ void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my
                         if (distance > 0.1f) {
                             my_x = move_res.x();
                             my_y = move_res.y();
-                            if (my_x == 0.0f && my_y == 0.0f) my_hp = 100;
-                            std::cout << "\n✨ [System] 기절하여 서버에 의해 마을로 강제 이동(부활) 되었습니다!\n";
+                            if (my_x == 0.0f && my_y == 0.0f && my_hp <= 0) {
+                                my_hp = 100;
+                                std::cout << "\n✨ [System] 기절하여 서버에 의해 마을로 강제 이동(부활) 되었습니다!\n";
+                            }
+                            else {
+                                std::cout << "\n🚧 [System] 맵의 경계에 도달하여 위치가 보정되었습니다.\n";
+                            }
+
                             std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
                         }
                     }
