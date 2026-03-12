@@ -1,4 +1,14 @@
 #pragma once
+
+// ==========================================
+// ★ 외부 라이브러리(Boost, Protobuf)의 정적 분석 경고 무시
+// ==========================================
+#pragma warning(disable: 26495) // 변수가 초기화되지 않았습니다.
+#pragma warning(disable: 26439) // 이 종류의 함수는 throw하지 않아야 합니다.
+#pragma warning(disable: 26451) // 산술 오버플로
+#pragma warning(disable: 26812) // enum class 사용 권장
+#pragma warning(disable: 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
+
 #include <boost/asio.hpp>
 #include <memory>
 #include <vector>
@@ -9,12 +19,6 @@
 
 #include "protocol.pb.h"
 #include "PacketDispatcher.h"
-
-// 외부 라이브러리(absl, protobuf 등)에서 발생하는 초기화 누락 및 noexcept 관련 경고 무시
-#pragma warning(disable: 26495) // 변수가 초기화되지 않았습니다.
-#pragma warning(disable: 26439) // 이 종류의 함수는 throw하지 않아야 합니다.
-#pragma warning(disable: 26451) // 산술 오버플로
-#pragma warning(disable: 26812) // enum class 사용 권장
 
 #pragma pack(push, 1)
 struct PacketHeader {

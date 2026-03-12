@@ -2,6 +2,7 @@
 #include "AdminAPI/AdminService.h"
 #include "Handlers/WorldHandlers.h"
 #include "../Common/MemoryPool.h"
+#include "../Common/ConfigManager.h"
 
 #include <iostream>
 #include <windows.h>
@@ -127,14 +128,23 @@ private:
 // ==========================================
 int main() {
     SetConsoleOutputCP(CP_UTF8);
+    if (!ConfigManager::GetInstance().LoadConfig("config.json"))
+    {
+        std::cerr << "🚨 config 설정 파일 오류로 인해 WorldServer 종료합니다.\n";
+        system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
+        return -1;
+    }
 
     // ★ 분리된 패킷 핸들러 등록
     g_s2s_dispatcher.RegisterHandler(Protocol::PKT_LOGIN_WORLD_SELECT_REQ, Handle_WorldLoginSelectReq);
 
     try {
         boost::asio::io_context io_context;
-        WorldServer server(io_context, 7000);
-        std::cout << "[WorldServer] 월드 중앙 서버 가동 시작 (Port: 7000) Created by Jeong Shin Young\n";
+
+        short port = ConfigManager::GetInstance().GetWorldServerPort();
+
+        WorldServer server(io_context, port);
+        std::cout << "[WorldServer] 월드 중앙 서버 가동 시작 (Port: " << port << ") Created by Jeong Shin Young\n";
         std::cout << "=================================================\n";
 
         // ★ 분리된 gRPC 서버 스레드 구동

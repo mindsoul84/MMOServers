@@ -200,7 +200,12 @@ class LoginServer {
 int main() {
     SetConsoleOutputCP(CP_UTF8);
 
-    ConfigManager::GetInstance().LoadConfig("config.json");
+    if (!ConfigManager::GetInstance().LoadConfig("config.json"))
+    {
+        std::cerr << "🚨 config 설정 파일 오류로 인해 LoginServer 종료합니다.\n";
+        system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
+        return -1;
+    }
 
     // ★ 분리된 핸들러들을 디스패처에 등록
     g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
@@ -212,17 +217,21 @@ int main() {
         boost::asio::io_context io_context;
 
         g_worldConnection = std::make_shared<WorldConnection>(std::ref(io_context));
-        g_worldConnection->Connect("127.0.0.1", 7000);
+        short world_port = ConfigManager::GetInstance().GetLoginWorldConnPort();
+        g_worldConnection->Connect("127.0.0.1", world_port);
 
-        LoginServer server(io_context, 7777);
-        std::cout << "[LoginServer] 로그인 서버 가동 시작 (Port: 7777) Created by Jeong Shin Young\n";
+        short login_port = ConfigManager::GetInstance().GetLoginServerPort();
+        LoginServer server(io_context, login_port);
+        std::cout << "[LoginServer] 로그인 서버 가동 시작 (Port: " << login_port << ") Created by Jeong Shin Young\n";
         std::cout << "=================================================\n";
 
         // =========================================================
         // ★ DB 전담 워커 스레드 구동 (Thread-Local DB 연결)
         // =========================================================
-        std::cout << "[System] 💾 DB 연산 전용 백그라운드 스레드 가동 (2개)...\n";
-        for (int i = 0; i < 2; ++i) {
+        int db_thread_count = ConfigManager::GetInstance().GetLoginDbThreadCount();
+
+        std::cout << "[System] 💾 DB 연산 전용 백그라운드 스레드 가동 (" << db_thread_count << "개)...\n";
+        for (int i = 0; i < db_thread_count; ++i) {
             std::thread([i]() {
                 // 1. 이 스레드만의 전용 DB 연결 객체 생성
                 if (ConfigManager::GetInstance().UseDB()) {
@@ -244,10 +253,10 @@ int main() {
         }
         std::cout << "=================================================\n";
 
-        unsigned int thread_count = std::thread::hardware_concurrency();
-        if (thread_count == 0) thread_count = 4;
+        unsigned int max_thread_count = ConfigManager::GetInstance().GetLoginMaxThreadCount();
+        if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
         std::vector<std::thread> threads;
-        for (unsigned int i = 0; i < thread_count; ++i) {
+        for (unsigned int i = 0; i < max_thread_count; ++i) {
             threads.emplace_back([&io_context]() { io_context.run(); });
         }
         for (auto& t : threads) { if (t.joinable()) t.join(); }

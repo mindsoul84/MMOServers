@@ -5,7 +5,8 @@
 
 using boost::asio::ip::tcp;
 
-GatewaySession::GatewaySession(tcp::socket socket) noexcept : socket_(std::move(socket)) {}
+GatewaySession::GatewaySession(tcp::socket socket) noexcept
+    : socket_(std::move(socket)), strand_(GameContext::Get().io_context) { }
 
 void GatewaySession::start() {
     ReadHeader();
@@ -28,12 +29,48 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
     memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
 
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf](boost::system::error_code ec, std::size_t) {
-            if (ec) {
-                std::cerr << "[GameServer] Gateway로 S2S 패킷 전송 실패\n";
+
+    size_t write_size = header.size;
+
+    // =========================================================
+    // ★ [핵심] 여러 스레드가 동시에 Send를 호출해도, strand_ 내부에서 안전하게 큐에 쌓입니다.
+    // =========================================================
+    boost::asio::post(strand_, [this, self, send_buf, write_size]() {
+        // 큐가 비어있었다면, 현재 소켓이 놀고 있다는 뜻이므로 즉시 전송을 시작합니다.
+        bool write_in_progress = !send_queue_.empty();
+
+        send_queue_.push_back({ send_buf, write_size });
+
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
+}
+
+// ★ [추가] 실제 비동기 전송을 수행하는 함수
+void GatewaySession::DoWrite() {
+    auto self(shared_from_this());
+    auto& front_msg = send_queue_.front();
+
+    // bind_executor를 사용하여 콜백 또한 strand_ 내부에서 안전하게 실행되도록 보장합니다.
+    boost::asio::async_write(socket_,
+        boost::asio::buffer(front_msg.first->buffer_.data(), front_msg.second),
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec) {
+                // 방금 전송이 끝난 패킷을 큐에서 제거합니다.
+                send_queue_.pop_front();
+
+                // 큐에 대기 중인 다음 패킷이 있다면 이어서 전송합니다. (꼬리물기)
+                if (!send_queue_.empty()) {
+                    DoWrite();
+                }
             }
-        });
+            else {
+                // 에러 발생 시 큐를 비워버립니다. 소켓 정리는 Read 쪽에서 처리됩니다.
+                std::cerr << "[GameServer] Gateway로 S2S 패킷 전송 실패 (DoWrite)\n";
+                send_queue_.clear();
+            }
+        }));
 }
 
 void GatewaySession::ReadHeader() {
@@ -74,9 +111,13 @@ void GatewaySession::ReadPayload(uint16_t payload_size) {
         [this, self, payload_size](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 auto session_ptr = self;
-                // ★ [수정] GameContext의 디스패처 사용
+                // GameContext의 디스패처 사용
                 GameContext::Get().gatewayDispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }
+            else {
+                std::cerr << "[GameServer] 🚨 GatewayServer와의 연결이 끊어졌습니다.\n";
+            }
+
         });
 }

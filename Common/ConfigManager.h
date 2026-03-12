@@ -10,6 +10,23 @@ private:
     std::string server_name_;
     std::string database_;
 
+    // 각 서버별 설정 Default 변수
+    short game_server_port_;
+    short game_world_conn_port_;
+    int game_max_thread_count_;
+    int game_ai_thread_count_;
+
+    short gateway_server_port_;
+    short gateway_game_conn_port_;
+    int gateway_max_thread_count_;
+
+    short login_server_port_;
+    short login_world_conn_port_;
+    int login_max_thread_count_;
+    int login_db_thread_count_;
+
+    short world_server_port_;
+
     // 싱글톤 패턴
     ConfigManager() = default;
 
@@ -36,6 +53,23 @@ public:
             server_name_ = pt.get<std::string>("MSSQL_INFO.ServerName", ".\\SQLEXPRESS");
             database_ = pt.get<std::string>("MSSQL_INFO.Database", "game_db");
 
+            // JSON 데이터 파싱 (기본값 세팅 포함)
+            game_server_port_ = pt.get<short>("game_server_info.game_server_port");
+            game_world_conn_port_ = pt.get<short>("game_server_info.world_conn_port");
+            game_max_thread_count_ = pt.get<int>("game_server_info.max_thread_count");
+            game_ai_thread_count_ = pt.get<int>("game_server_info.ai_thread_count");
+
+            gateway_server_port_ = pt.get<short>("gateway_server_info.gateway_server_port");
+            gateway_game_conn_port_ = pt.get<short>("gateway_server_info.game_conn_port");
+            gateway_max_thread_count_ = pt.get<int>("gateway_server_info.max_thread_count");
+
+            login_server_port_ = pt.get<short>("login_server_info.login_server_port");
+            login_world_conn_port_ = pt.get<short>("login_server_info.world_conn_port");
+            login_max_thread_count_ = pt.get<int>("login_server_info.max_thread_count");
+            login_db_thread_count_ = pt.get<int>("login_server_info.db_thread_count");
+
+            world_server_port_ = pt.get<short>("world_server_info.world_server_port");
+
             std::cout << "[ConfigManager] 환경 설정 로드 성공! (DB 연동: "
                 << (db_conn_ ? "ON" : "OFF") << ")\n";
             if (db_conn_) {
@@ -56,4 +90,20 @@ public:
     // Getter 함수들
     const std::string& GetServerName() const { return server_name_; }
     const std::string& GetDatabase() const { return database_; }
+
+    short GetGameServerPort() const { return game_server_port_; }
+    short GetGameWorldConnPort() const { return game_world_conn_port_; }
+    int GetGameMaxThreadCount() const { return game_max_thread_count_; }
+    int GetGameAiThreadCount() const { return game_ai_thread_count_; }
+
+    short GetGatewayServerPort() const { return gateway_server_port_; }
+    short GetGatewayGameConnPort() const { return gateway_game_conn_port_; }
+    int GetGatewayMaxThreadCount() const { return gateway_max_thread_count_; }
+
+    short GetLoginServerPort() const { return login_server_port_; }
+    short GetLoginWorldConnPort() const { return login_world_conn_port_; }
+    int GetLoginMaxThreadCount() const { return login_max_thread_count_; }
+    int GetLoginDbThreadCount() const { return login_db_thread_count_; }
+
+    short GetWorldServerPort() const { return world_server_port_; }
 };

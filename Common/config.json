@@ -3,5 +3,25 @@
 	"MSSQL_INFO": {
 		"ServerName": ".\\SQLEXPRESS",
 		"Database": "game_db"
+	},
+	"game_server_info": {
+		"game_server_port": 9000,
+		"world_conn_port": 7000,
+		"max_thread_count": 4,
+		"ai_thread_count": 4
+	},
+	"gateway_server_info": {
+		"gateway_server_port": 8888,
+		"game_conn_port": 9000,
+		"max_thread_count": 4
+	},
+	"login_server_info": {
+		"login_server_port": 7777,
+		"world_conn_port": 7000,
+		"max_thread_count": 4,
+		"db_thread_count": 2
+	},
+	"world_server_info": {
+		"world_server_port": 7000
 	}
 }

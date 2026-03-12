@@ -7,6 +7,7 @@
 #include "../Common/ConfigManager.h"
 #include "../Common/DB/DBManager.h"
 #include "../Common/DataManager/DataManager.h"
+#include "../Common/ConfigManager.h"
 #include "Pathfinder/MapGenerator.h"
 #include "Monster/MonsterManager.h"
 
@@ -22,9 +23,6 @@ using boost::asio::ip::tcp;
 
 // ★ Thread-Local 변수 정의
 thread_local dtNavMeshQuery* t_navQuery = nullptr;
-
-// ★ Thread-Local DB 연결 객체 (이전에 분리했던 부분)
-//thread_local DBManager* t_dbManager = nullptr;
 
 // ==========================================
 // GameNetworkServer: 9000번 포트에서 Gateway의 접속(Accept) 대기
@@ -65,7 +63,7 @@ void GameContext::BroadcastToGateways(uint16_t pktId, const google::protobuf::Me
     }
 }
 
-void StartAIThreadPool(int ai_thread_count = 4) {
+void StartAIThreadPool(int ai_thread_count) {
     std::cout << "[System] 🧠 AI 전용 비동기 스레드 풀 가동 (" << ai_thread_count << "개)...\n";
     auto& ctx = GameContext::Get();
 
@@ -92,7 +90,12 @@ int main() {
     SetConsoleOutputCP(CP_UTF8);
 
     // 1. 가장 먼저 환경 설정(config.json)을 로드합니다.
-    ConfigManager::GetInstance().LoadConfig("config.json");
+    if (!ConfigManager::GetInstance().LoadConfig("config.json"))
+    {
+        std::cerr << "🚨 config 설정 파일 오류로 인해 GameServer 종료합니다.\n";
+        system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
+        return -1;
+    }
 
     // 2. 설정에 DB 연동이 true로 되어 있다면 DB 연결 시도
     if (ConfigManager::GetInstance().UseDB()) {        
@@ -134,7 +137,8 @@ int main() {
     InitMonsters();
     StartAITickThread();
     // =========================================================
-    StartAIThreadPool(4);   // 길찾기 전담 스레드 풀(4개) 가동
+    short ai_thread_count = ConfigManager::GetInstance().GetGameAiThreadCount();
+    StartAIThreadPool(ai_thread_count);   // 길찾기 전담 스레드 풀(4개) 가동
     // =========================================================
     
     // ★ 디스패처 등록
@@ -148,25 +152,27 @@ int main() {
         //boost::asio::io_context io_context;
 
         // 1. S2S 서버 객체 생성 (포트: 9000)
-        GameNetworkServer server(ctx.io_context, 9000);
-        std::cout << "[System] 코어 게임 로직 서버 가동 (Port: 9000) Created by Jeong Shin Young\n";
+        short game_port = ConfigManager::GetInstance().GetGameServerPort();
+        GameNetworkServer server(ctx.io_context, game_port);
+        std::cout << "[System] 코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young\n";
 
         // =========================================================
-        // WorldServer(7000) 연결
+        // WorldServer 연결
         // =========================================================
         ctx.worldConnection = std::make_shared<WorldConnection>(ctx.io_context);
-        ctx.worldConnection->Connect("127.0.0.1", 7000);
+        short world_port = ConfigManager::GetInstance().GetGameWorldConnPort();
+        ctx.worldConnection->Connect("127.0.0.1", world_port);
         // =========================================================
 
         // 2. CPU 코어 개수에 맞춰 스레드 개수 설정
-        unsigned int thread_count = std::thread::hardware_concurrency();
-        if (thread_count == 0) thread_count = 4;
-        std::cout << "[System] 워커 스레드 개수 설정: " << thread_count << "개\n";
+        unsigned int max_thread_count = ConfigManager::GetInstance().GetGameMaxThreadCount();
+        if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
+        std::cout << "[System] 워커 스레드 개수 설정: " << max_thread_count << "개\n";
 
         // 3. 스레드 풀 생성 및 io_context.run() 실행
         std::cout << "[System] 여러 스레드에서 io_context.run()을 호출하여 스레드 풀을 구성합니다...\n";
         std::vector<std::thread> threads;
-        for (unsigned int i = 0; i < thread_count; ++i) {
+        for (unsigned int i = 0; i < max_thread_count; ++i) {
             threads.emplace_back([&ctx]() {
                 ctx.io_context.run();
             });
