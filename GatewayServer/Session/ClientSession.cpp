@@ -1,5 +1,5 @@
 #include "ClientSession.h"
-#include "../Network/GameConnection.h" // S2S 접속 객체 참조용
+#include "../Network/GameConnection.h"
 #include "..\Common\MemoryPool.h"
 #include <iostream>
 
@@ -32,14 +32,18 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
 
 void ClientSession::OnDisconnected() {
     if (!account_id_.empty()) {
-        if (g_gameConnection) {
+        auto& ctx = GatewayContext::Get();
+
+        // ★ [수정] g_gameConnection → ctx.gameConnection
+        if (ctx.gameConnection) {
             Protocol::GatewayGameLeaveReq leave_req;
             leave_req.set_account_id(account_id_);
-            g_gameConnection->Send(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, leave_req);
+            ctx.gameConnection->Send(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, leave_req);
         }
 
-        std::lock_guard<std::mutex> lock(g_clientMutex);
-        g_clientMap.erase(account_id_);
+        // ★ [수정] g_clientMutex, g_clientMap → ctx.clientMutex, ctx.clientMap
+        std::lock_guard<std::mutex> lock(ctx.clientMutex);
+        ctx.clientMap.erase(account_id_);
         std::cout << "[Gateway] 유저 접속 종료 및 맵에서 삭제됨: " << account_id_ << "\n";
         account_id_ = "";
     }
@@ -54,7 +58,8 @@ void ClientSession::ReadHeader() {
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
                 if (payload_size == 0) {
                     auto session_ptr = self;
-                    g_gateway_dispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
+                    // ★ [수정] g_gateway_dispatcher → GatewayContext::Get().clientDispatcher
+                    GatewayContext::Get().clientDispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
                     ReadHeader();
                 }
                 else {
@@ -72,7 +77,8 @@ void ClientSession::ReadPayload(uint16_t payload_size) {
         [this, self, payload_size](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 auto session_ptr = self;
-                g_gateway_dispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
+                // ★ [수정] g_gateway_dispatcher → GatewayContext::Get().clientDispatcher
+                GatewayContext::Get().clientDispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }
             else OnDisconnected();

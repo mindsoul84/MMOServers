@@ -92,12 +92,22 @@ bool NavMesh::LoadNavMeshFromFile(const char* filepath) {
 std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     std::vector<Vector3> final_path;
 
-    // ★ [매직 코드] 현재 이 함수를 실행 중인 스레드에 t_navQuery가 있다면 그걸 쓰고, 
-    // 만약 메인 스레드에서 호출해서 없다면 기존의 m_navQuery를 사용하는 안전한 Fallback 로직입니다!
+    // =========================================================
+    // ★ [스레드 안전성 수정]
+    // 이 함수에서 dtNavMeshQuery를 사용하는 모든 호출은 반드시 'query' 변수를 통해야 합니다.
+    //
+    // ❌ 기존 문제:
+    //   - findNearestPoly, findStraightPath 에서 공유 객체 m_navQuery 를 직접 호출
+    //   - AI 스레드 여러 개가 동시에 m_navQuery 를 건드릴 경우 → 레이스 컨디션 (크래시)
+    //
+    // ✅ 수정 방식:
+    //   - query = t_navQuery(스레드 전용) or m_navQuery(fallback) 로 한 번만 결정
+    //   - 이후 findNearestPoly / findPath / findStraightPath 모두 query 를 통해 호출
+    // =========================================================
     dtNavMeshQuery* query = t_navQuery ? t_navQuery : m_navQuery;
 
-    // 맵 데이터가 없으면 직선 반환 (에러 방지)
-    if (!m_navMesh || !m_navQuery) {
+    // 맵 데이터 또는 유효한 query 가 없으면 직선 반환 (에러 방지)
+    if (!m_navMesh || !query) {
         final_path.push_back(start);
         final_path.push_back(end);
         return final_path;
@@ -110,12 +120,12 @@ std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     dtPolyRef startRef = 0, endRef = 0;
     float nearestStart[3], nearestEnd[3];
 
-    // 참고: m_filter는 단순히 옵션(Flag)만 들고 있는 읽기 전용(Read-Only) 객체이므로
-    // 여러 스레드에서 동시에 접근해도 100% 스레드 세이프(Thread-Safe) 합니다!
-    m_navQuery->findNearestPoly(startPos, extents, m_filter, &startRef, nearestStart);
-    m_navQuery->findNearestPoly(endPos, extents, m_filter, &endRef, nearestEnd);
+    // m_filter는 읽기 전용(Read-Only) 이므로 멀티스레드 공유 가능.
+    // findNearestPoly 는 query 내부 상태를 변경하므로 반드시 thread-local query 사용.
+    query->findNearestPoly(startPos, extents, m_filter, &startRef, nearestStart);
+    query->findNearestPoly(endPos, extents, m_filter, &endRef, nearestEnd);
 
-    // ★ [핵심] 폴리곤을 못 찾았다면 빈 배열 대신 직선 경로를 반환하여 AI가 멈추는 것을 방지!
+    // 폴리곤을 못 찾았다면 직선 경로를 반환하여 AI가 멈추는 것을 방지
     if (!startRef || !endRef) {
         final_path.push_back(start);
         final_path.push_back(end);
@@ -126,8 +136,7 @@ std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
     dtPolyRef path[MAX_POLYS];
     int pathCount = 0;
 
-    //m_navQuery->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);    
-    query->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);     // 모든 m_navQuery를 query로 교체!
+    query->findPath(startRef, endRef, nearestStart, nearestEnd, m_filter, path, &pathCount, MAX_POLYS);
 
     if (pathCount > 0) {
         float straightPath[MAX_POLYS * 3];
@@ -135,7 +144,8 @@ std::vector<Vector3> NavMesh::FindPath(Vector3 start, Vector3 end) {
         dtPolyRef straightPathPolys[MAX_POLYS];
         int straightPathCount = 0;
 
-        m_navQuery->findStraightPath(nearestStart, nearestEnd, path, pathCount,
+        // ★ [핵심 수정] m_navQuery → query 로 교체 (스레드 안전성 확보)
+        query->findStraightPath(nearestStart, nearestEnd, path, pathCount,
             straightPath, straightPathFlags, straightPathPolys,
             &straightPathCount, MAX_POLYS, 0);
 
