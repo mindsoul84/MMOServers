@@ -1,14 +1,20 @@
 [
 	{
 		"mon_id": 10000,
-		"mon_pos": { "x": 5.0, "y": 45.0 }
+		"mon_pos": { "x": 5.0, "y": 15.0 },
+		"mon_hp": 200,
+		"mon_respawn_sec": 10
 	},
 	{
 		"mon_id": 10001,
-		"mon_pos": { "x": 50.0, "y": 6.0 }
+		"mon_pos": { "x": 20.0, "y": 6.0 },
+		"mon_hp": 300,
+		"mon_respawn_sec": 20
 	},
 	{
 		"mon_id": 10002,
-		"mon_pos": { "x": 11.0, "y": 9.0 }
+		"mon_pos": { "x": 11.0, "y": 9.0 },
+		"mon_hp": 400,
+		"mon_respawn_sec": 30
 	}
 ]

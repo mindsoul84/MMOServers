@@ -16,6 +16,10 @@ bool MonsterDataManager::LoadMonsterData(const std::string& dataPath) {
             data.mon_id = item.second.get<uint64_t>("mon_id");
             data.x = item.second.get<float>("mon_pos.x");
             data.y = item.second.get<float>("mon_pos.y");
+            
+            // ★ 체력과 리스폰 시간 파싱 (안전하게 기본값 세팅)
+            data.hp = item.second.get<int>("mon_hp", 100);
+            data.respawn_sec = item.second.get<int>("mon_respawn_sec", 60);
 
             monsterSpawnList_.push_back(data);
         }

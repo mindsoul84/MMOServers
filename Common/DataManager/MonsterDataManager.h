@@ -8,6 +8,8 @@ struct MonsterSpawnData {
     uint64_t mon_id;
     float x;
     float y;
+    int hp;             // 몬스터 체력
+    int respawn_sec;    // 리스폰 시간(초)
 };
 
 class MonsterDataManager {

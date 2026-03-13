@@ -21,6 +21,7 @@ enum class MonsterState {
 
 // ★ std::enable_shared_from_this 상속 추가 (비동기 람다 안에서 self 잡기 위함)
 class Monster : public std::enable_shared_from_this<Monster> {
+
 private:
     uint64_t monster_id_;
     Vector3 position_;
@@ -42,6 +43,9 @@ private:
     float attack_range_;      // 공격 사거리 (예: 1.5f)
     float attack_cooldown_;   // 공격 주기 (예: 2.0초)
     float attack_timer_;      // 쿨타임 계산용 타이머
+
+    int respawn_sec_ = 60;    // 리스폰 쿨타임
+    float dead_timer_ = 0.0f;    // 몬스터 죽은 후 흐른 시간(초) 누적기
 
     // [콜백 추가] 몬스터가 공격 모션을 취할 때 호출될 함수
     std::function<void(uint64_t attacker_id, uint64_t target_id, int damage)> on_attack_callback_;
@@ -98,6 +102,23 @@ public:
 
     // 서버 Tick 마다 호출될 업데이트 함수 선언
     void Update(float delta_time);
+
+    // ★ [추가] JSON 데이터를 적용하기 위한 Setter 및 부활 함수
+    void SetMaxHp(int hp) { max_hp_ = hp; hp_ = hp; }
+    void SetRespawnSec(int sec) { respawn_sec_ = sec; }
+    int GetRespawnSec() const { return respawn_sec_; }
+
+    void AddDeadTime(float delta_time) { dead_timer_ += delta_time; }
+    float GetDeadTime() const { return dead_timer_; }
+
+    void Respawn() {
+        hp_ = max_hp_;
+        state_ = MonsterState::IDLE;
+        position_ = spawn_position_;
+        dead_timer_ = 0.0f;
+        target_user_id_ = 0;
+        if (!current_path_.empty()) current_path_.clear();
+    }
 
 private:
     // 각 상태별 처리 함수 선언

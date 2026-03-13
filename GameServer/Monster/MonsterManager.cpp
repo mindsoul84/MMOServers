@@ -45,36 +45,14 @@ void InitMonsters() {
             auto it_player = ctx_inner.playerMap.find(it_acc->second);
             if (it_player == ctx_inner.playerMap.end()) return;
 
+            // 유저의 HP 차감 연산
             it_player->second.hp -= damage;
             if (it_player->second.hp < 0) it_player->second.hp = 0;
 
-            if (it_player->second.hp <= 0) {
-                std::cout << "\n[System] 💀 당신(" << it_acc->second << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
-
-                float old_x = it_player->second.x;
-                float old_y = it_player->second.y;
-
-                it_player->second.hp = 100;
-                it_player->second.x = 0.0f;
-                it_player->second.y = 0.0f;
-
-                ctx_inner.zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
-
-                Protocol::GameGatewayMoveRes teleport_res;
-                teleport_res.set_account_id(it_acc->second);
-                teleport_res.set_x(0.0f);
-                teleport_res.set_y(0.0f);
-                teleport_res.set_z(0.0f);
-                teleport_res.set_yaw(0.0f);
-                teleport_res.add_target_account_ids(it_acc->second);
-
-                ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, teleport_res);
-                return;
-            }
-
-            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << it_acc->second
-                << ")를 공격! 데미지: " << damage << ", 남은 체력: " << it_player->second.hp << "\n";
-
+            // =====================================================================
+            // ★ [버그 픽스] 죽었든 살았든, 무조건 '타격 결과(ATTACK_RES)'부터 먼저 쏩니다!
+            // 이렇게 해야 클라이언트가 자신의 my_hp를 0으로 갱신할 수 있습니다.
+            // =====================================================================
             Protocol::GameGatewayAttackRes s2s_res;
             s2s_res.set_attacker_uid(attacker_uid);
             s2s_res.set_target_uid(target_uid);
@@ -93,7 +71,48 @@ void InitMonsters() {
             }
 
             ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
+
+            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << it_acc->second
+                << ")를 공격! 데미지: " << damage << ", 남은 체력: " << it_player->second.hp << "\n";
+
+            // =====================================================================
+            // ★ 2. 만약 이번 타격으로 유저가 기절했다면, 그 직후에 텔레포트(MOVE_RES)를 쏩니다.
+            // =====================================================================
+            if (it_player->second.hp <= 0) {
+                std::cout << "\n[System] 💀 당신(" << it_acc->second << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
+
+                float old_x = it_player->second.x;
+                float old_y = it_player->second.y;
+
+                // HP 회복 및 좌표 초기화 (마을)
+                it_player->second.hp = 100;
+                it_player->second.x = 0.0f;
+                it_player->second.y = 0.0f;
+
+                // 물리 엔진(Zone)에서도 유저를 마을로 순간이동
+                ctx_inner.zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
+
+                Protocol::GameGatewayMoveRes teleport_res;
+                teleport_res.set_account_id(it_acc->second);
+                teleport_res.set_x(0.0f);
+                teleport_res.set_y(0.0f);
+                teleport_res.set_z(0.0f);
+                teleport_res.set_yaw(0.0f);
+                teleport_res.add_target_account_ids(it_acc->second);
+
+                ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, teleport_res);
+                return;
+            }
+
+
+            
             });
+
+        // ==========================================================
+        // ★ [추가] JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여!
+        // ==========================================================
+        mon->SetMaxHp(spawn_data.hp);
+        mon->SetRespawnSec(spawn_data.respawn_sec);
 
         mon->SetPosition(spawn_data.x, spawn_data.y, 0.0f);
         mon->SetSpawnPosition(spawn_data.x, spawn_data.y, 0.0f);
@@ -101,8 +120,8 @@ void InitMonsters() {
         ctx.monsters.push_back(mon);
         ctx.zone->EnterZone(mon_id, mon->GetPosition().x, mon->GetPosition().y);
 
-        std::cout << "  -> [스폰] 몬스터(ID:" << mon_id << ") 생성됨. 좌표 (X:"
-            << mon->GetPosition().x << ", Y:" << mon->GetPosition().y << ")\n";
+        std::cout << "  -> [스폰] 몬스터(ID:" << mon_id << ", HP:" << spawn_data.hp << ", 리스폰:" << spawn_data.respawn_sec << "초) 생성됨." <<
+                     " 좌표 (X:" << mon->GetPosition().x << ", Y:" << mon->GetPosition().y << ")\n";
     }
     std::cout << "[MonsterManager] 몬스터 " << ctx.monsters.size() << "마리 스폰 완료 및 Zone 등록됨.\n";
 }
@@ -121,6 +140,43 @@ void ScheduleNextAITick() {
         g_last_ai_time = current_time;
 
         for (auto& mon : ctx.monsters) {
+
+            // ==========================================================
+            // ★ [추가] 몬스터가 죽어있다면 타이머를 돌리고 부활
+            // ==========================================================
+            if (mon->GetState() == MonsterState::DEAD) {
+                mon->AddDeadTime(delta_time); // 0.1초씩 누적
+
+                // 설정된 리스폰 시간이 다 지났다면?
+                if (mon->GetDeadTime() >= mon->GetRespawnSec()) {
+                    mon->Respawn(); // 부활! (HP 꽉 채우고 제자리로)
+
+                    std::cout << "[System] 🦇 몬스터(ID:" << mon->GetId() << ")가 " << mon->GetRespawnSec() << "초가 지나서 리스폰되었습니다!\n";
+
+                    // 부활한 사실을 주변 유저들에게 알려서 화면에 다시 나타나게 합니다.
+                    auto aoi_uids = ctx.zone->GetPlayersInAOI(mon->GetPosition().x, mon->GetPosition().y);
+                    if (!aoi_uids.empty()) {
+                        Protocol::GameGatewayMoveRes s2s_res;
+                        s2s_res.set_account_id("MONSTER_" + std::to_string(mon->GetId()));
+                        s2s_res.set_x(mon->GetPosition().x);
+                        s2s_res.set_y(mon->GetPosition().y);
+                        s2s_res.set_z(mon->GetPosition().z);
+                        s2s_res.set_yaw(0.0f);
+
+                        for (uint64_t target_uid : aoi_uids) {
+                            auto it = ctx.uidToAccount.find(target_uid);
+                            if (it != ctx.uidToAccount.end()) {
+                                s2s_res.add_target_account_ids(it->second);
+                            }
+                        }
+                        ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
+                    }
+                }
+
+                continue; // ★ 죽어있는 동안은 밑에 있는 IDLE, CHASE 연산을 하지 않고 넘어갑니다.
+            }
+            // ==========================================================
+
             float old_x = mon->GetPosition().x;
             float old_y = mon->GetPosition().y;
 
