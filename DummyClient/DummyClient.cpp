@@ -125,8 +125,8 @@ bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string
 // =======================================================
 // [4] 백그라운드 수신 스레드 가동 함수
 // =======================================================
-void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my_x, float& my_y, int& my_hp) {
-    std::thread recv_thread([&socket, my_id, &my_x, &my_y, &my_hp]() {
+void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my_x, float& my_y, int& my_hp, std::unordered_map<std::string, std::pair<float, float>>& monster_pos_map) {
+    std::thread recv_thread([&socket, my_id, &my_x, &my_y, &my_hp, &monster_pos_map]() {
         try {
             while (true) {
                 PacketHeader h;
@@ -142,11 +142,11 @@ void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my
                 }
                 else if (h.id == Protocol::PKT_GATEWAY_CLIENT_MOVE_RES)
                 {
-                    HandleMoveRes(p, my_id, my_x, my_y, my_hp);
+                    HandleMoveRes(p, my_id, my_x, my_y, my_hp, monster_pos_map);
                 }
                 else if (h.id == Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES)
                 {
-                    HandleAttackRes(p, my_id, my_x, my_y, my_hp);
+                    HandleAttackRes(p, my_id, my_x, my_y, my_hp, monster_pos_map);
                 }
             }
         }
@@ -269,8 +269,10 @@ int main() {
         // 4. 인게임 로직 실행
         float my_x = 0.0f, my_y = 0.0f;
         int my_hp = 100;
+        
+        std::unordered_map<std::string, std::pair<float, float>> monster_pos_map;   // 이 클라이언트만의 고유한 몬스터 위치 기억 맵!
 
-        StartReceiveThread(socket, my_id, my_x, my_y, my_hp);
+        StartReceiveThread(socket, my_id, my_x, my_y, my_hp, monster_pos_map);
         RunActionLoop(socket, my_x, my_y, my_hp);
 
         socket.close();
