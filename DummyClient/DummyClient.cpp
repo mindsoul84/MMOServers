@@ -11,6 +11,9 @@
 #include "protocol.pb.h"
 #include "Utils/StringUtils.h"
 #include "Network/PacketUtils.h"
+#include "Handlers/GatewayHandlers.h"
+
+#include "..\Common\ConfigManager.h"
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -68,8 +71,9 @@ bool ProcessLogin(tcp::socket& socket, tcp::resolver& resolver, bool use_db, std
 
         if (socket.is_open()) { boost::system::error_code ec; socket.close(ec); }
 
-        std::cout << "[DummyClient] LoginServer(7777) 연결 중...\n";
-        boost::asio::connect(socket, resolver.resolve("127.0.0.1", "7777"));
+        short login_port = ConfigManager::GetInstance().GetDummyClientLoginPort();
+        std::cout << "[DummyClient] LoginServer(" << login_port << ") 연결 중...\n";
+        boost::asio::connect(socket, resolver.resolve("127.0.0.1", std::to_string(login_port)));
 
         Protocol::LoginReq login_req;
         login_req.set_id(out_id);
@@ -136,45 +140,13 @@ void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my
                         std::cout << "\n[채팅] " << chat_res.account_id() << " : " << chat_res.msg() << "\n";
                     }
                 }
-                else if (h.id == Protocol::PKT_GATEWAY_CLIENT_MOVE_RES) {
-                    Protocol::MoveRes move_res;
-                    if (move_res.ParseFromArray(p.data(), p.size()) && move_res.account_id() == my_id) {
-                        float distance = std::sqrt(std::pow(my_x - move_res.x(), 2) + std::pow(my_y - move_res.y(), 2));
-                        if (distance > 0.1f) {
-                            my_x = move_res.x();
-                            my_y = move_res.y();
-                            if (my_x == 0.0f && my_y == 0.0f && my_hp <= 0) {
-                                my_hp = 100;
-                                std::cout << "\n✨ [System] 기절하여 서버에 의해 마을로 강제 이동(부활) 되었습니다!\n";
-                            }
-                            else {
-                                std::cout << "\n🚧 [System] 맵의 경계에 도달하여 위치가 보정되었습니다.\n";
-                            }
-
-                            std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
-                        }
-                    }
+                else if (h.id == Protocol::PKT_GATEWAY_CLIENT_MOVE_RES)
+                {
+                    HandleMoveRes(p, my_id, my_x, my_y, my_hp);
                 }
-                else if (h.id == Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES) {
-                    Protocol::AttackRes attack_res;
-                    if (attack_res.ParseFromArray(p.data(), p.size())) {
-                        if (attack_res.damage() == 0) {
-                            std::cout << "\n[System] 범위에 벗어나 공격에 실패했습니다.\n";                            
-                        }
-                        else if (attack_res.target_account_id() == my_id) {
-                            my_hp = attack_res.target_remain_hp();
-                            std::cout << "\n🩸 [전투] 몬스터에게 " << attack_res.damage() << " 데미지를 입었습니다!\n";
-                            if (my_hp <= 0) std::cout << "💀 체력이 0이 되어 기절했습니다...\n";                            
-                        }
-                        else {
-                            std::cout << "\n[Combat] ⚔️ 몬스터(" << attack_res.target_account_id() << ") 타격 성공! 데미지: " << attack_res.damage() << " (남은 체력: " << attack_res.target_remain_hp() << ")\n";
-
-                            if (attack_res.target_remain_hp() <= 0) {
-                                std::cout << "🎉 [System] 💀 몬스터(" << attack_res.target_account_id() << ")가 쓰러졌습니다!\n";
-                            }
-                        }
-                        std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
-                    }
+                else if (h.id == Protocol::PKT_GATEWAY_CLIENT_ATTACK_RES)
+                {
+                    HandleAttackRes(p, my_id, my_x, my_y, my_hp);
                 }
             }
         }
@@ -189,17 +161,27 @@ void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my
 void RunActionLoop(tcp::socket& socket, float& my_x, float& my_y, int& my_hp) {
     std::cout << "\n [액션 모드] 방향키: 이동 / a키: 공격 / Enter: 채팅 / ESC: 종료\n--------------------------------------\n";
 
+    // 가독성을 높이기 위한 키 상수 정의
+    const int KEY_SPECIAL = 224; // 윈도우 방향키 선행 키코드
+    const int KEY_UP      = 72;
+    const int KEY_DOWN    = 80;
+    const int KEY_LEFT    = 75;
+    const int KEY_RIGHT   = 77;
+    const int KEY_ENTER   = 13;
+    const int KEY_ESC     = 27;
+
     while (true) {
         if (_kbhit()) {
             int key = _getch();
-            if (key == 224) { // 방향키
+            if (key == KEY_SPECIAL) { // 방향키
                 key = _getch();
                 bool moved = false;
-                switch (key) {
-                case 72: my_y += 1.0f; moved = true; break;
-                case 80: my_y -= 1.0f; moved = true; break;
-                case 75: my_x -= 1.0f; moved = true; break;
-                case 77: my_x += 1.0f; moved = true; break;
+                switch (key)
+                {
+                    case KEY_UP:    my_y += 1.0f; moved = true; break;
+                    case KEY_DOWN:  my_y -= 1.0f; moved = true; break;
+                    case KEY_LEFT:  my_x -= 1.0f; moved = true; break;
+                    case KEY_RIGHT: my_x += 1.0f; moved = true; break;
                 }
 
                 if (moved) {
@@ -209,7 +191,7 @@ void RunActionLoop(tcp::socket& socket, float& my_x, float& my_y, int& my_hp) {
                     std::cout << "[내 정보] HP: " << my_hp << " | 위치 X:" << my_x << " Y:" << my_y << "          \r";
                 }
             }
-            else if (key == 13) { // Enter 키 (채팅)
+            else if (key == KEY_ENTER) { // Enter 키 (채팅)
                 std::cout << "\n[채팅 모드] 입력> ";
                 std::string input;
                 std::getline(std::cin, input);
@@ -220,7 +202,7 @@ void RunActionLoop(tcp::socket& socket, float& my_x, float& my_y, int& my_hp) {
                 }
                 std::cout << "[액션 모드] 방향키: 이동 / a키: 공격 / Enter: 채팅 / ESC: 종료\n";
             }
-            else if (key == 27) { // ESC 키
+            else if (key == KEY_ESC) { // ESC 키
                 std::cout << "\n[DummyClient] 접속을 종료합니다.\n";
                 break;
             }
@@ -244,6 +226,14 @@ int main() {
     bool use_db = LoadConfigMode();
     std::string my_id, session_token, gateway_ip;
     int gateway_port = 0;
+
+    // 가장 먼저 환경 설정(config.json)을 로드합니다.
+    if (!ConfigManager::GetInstance().LoadConfig("config.json"))
+    {
+        std::cerr << "🚨 config 설정 파일 오류로 인해 DummyClient 종료합니다.\n";
+        system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
+        return -1;
+    }
 
     try {
         boost::asio::io_context io_context;

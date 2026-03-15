@@ -11,6 +11,8 @@ private:
     std::string database_;
 
     // 각 서버별 설정 Default 변수
+    short dummy_client_login_port_;
+
     short game_server_port_;
     short game_world_conn_port_;
     int game_max_thread_count_;
@@ -54,6 +56,8 @@ public:
             database_ = pt.get<std::string>("MSSQL_INFO.Database", "game_db");
 
             // JSON 데이터 파싱 (기본값 세팅 포함)
+            dummy_client_login_port_ = pt.get<short>("dummy_client_info.login_server_port");
+
             game_server_port_ = pt.get<short>("game_server_info.game_server_port");
             game_world_conn_port_ = pt.get<short>("game_server_info.world_conn_port");
             game_max_thread_count_ = pt.get<int>("game_server_info.max_thread_count");
@@ -90,6 +94,8 @@ public:
     // Getter 함수들
     const std::string& GetServerName() const { return server_name_; }
     const std::string& GetDatabase() const { return database_; }
+
+    short GetDummyClientLoginPort() const { return dummy_client_login_port_; }
 
     short GetGameServerPort() const { return game_server_port_; }
     short GetGameWorldConnPort() const { return game_world_conn_port_; }

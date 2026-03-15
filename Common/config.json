@@ -4,6 +4,9 @@
 		"ServerName": ".\\SQLEXPRESS",
 		"Database": "game_db"
 	},
+	"dummy_client_info": {
+		"login_server_port": 7777
+	},
 	"game_server_info": {
 		"game_server_port": 9000,
 		"world_conn_port": 7000,
