@@ -1,4 +1,5 @@
 #include "WorldHandlers.h"
+#include "../../Session/Session.h"
 #include "../LoginServer/LoginServer.h"
 #include "..\Common\Protocol\protocol.pb.h"
 #include <iostream>
