@@ -1,10 +1,5 @@
 #pragma once
 
-// ==========================================
-// ★ 외부 라이브러리(Boost, Protobuf)의 정적 분석 경고 무시
-// ==========================================
-#pragma warning(disable: 26495 26439 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
-
 #include <boost/asio.hpp>
 #include <memory>
 #include <vector>
@@ -12,7 +7,11 @@
 #include <unordered_map>
 #include <mutex>
 
+#pragma warning(push)
+#pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
 #include "protocol.pb.h"
+#pragma warning(pop)
+
 #include "PacketDispatcher.h"
 #include "Zone/Zone.h"
 #include "Monster/Monster.h"
