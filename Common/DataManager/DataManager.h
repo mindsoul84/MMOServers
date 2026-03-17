@@ -10,8 +10,7 @@
 // ★ 게임 내 모든 JSON/CSV 데이터를 관리하는 중앙 관리자
 // ==========================================
 class DataManager {
-public:
-    MonsterDataManager monsterData;
+public:    
 
     DataManager() = default;
     ~DataManager() = default;
@@ -21,4 +20,9 @@ public:
 
     // JsonData 폴더 내의 모든 파일을 로드하는 핵심 함수
     bool LoadAllData(const std::string& dataPath = "JsonData/");
+
+    const MonsterDataManager& GetMonsterData() const { return monsterData; }
+
+private:
+    MonsterDataManager monsterData;
 };

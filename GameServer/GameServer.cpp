@@ -116,7 +116,6 @@ int main() {
     // 추가: 한글 세팅이 끝난 안전한 타이밍에 Zone을 생성합니다!
     auto& ctx = GameContext::Get();
 
-    // ★ monsterDataManger 리팩토링
     if (!ctx.dataManager.LoadAllData("JsonData/")) {
         std::cerr << "몬스터 데이터를 불러오지 못해 서버를 종료합니다.\n";
         return -1;
