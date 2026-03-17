@@ -4,21 +4,17 @@
 #include <cstdint>
 #include <iostream>
 
+#include "MonsterDataManager.h"
+
 // ==========================================
 // ★ 게임 내 모든 JSON/CSV 데이터를 관리하는 중앙 관리자
 // ==========================================
 class DataManager {
-private:
-    
-    // 싱글톤 패턴
+public:
+    MonsterDataManager monsterData;
+
     DataManager() = default;
     ~DataManager() = default;
-
-public:
-    static DataManager& GetInstance() {
-        static DataManager instance;
-        return instance;
-    }
 
     DataManager(const DataManager&) = delete;
     DataManager& operator=(const DataManager&) = delete;

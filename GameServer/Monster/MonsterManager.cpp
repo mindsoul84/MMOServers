@@ -34,7 +34,8 @@ static const float NETWORK_SYNC_INTERVAL = 2.0f;
 // ==========================================
 void InitMonsters() {
     auto& ctx = GameContext::Get(); // ★ 컨텍스트 소환
-    const auto& spawnList = MonsterDataManager::GetInstance().GetMonsterSpawnList();
+
+    const auto& spawnList = ctx.dataManager.monsterData.GetMonsterSpawnList();
 
     for (const auto& spawn_data : spawnList) {
         uint64_t mon_id = spawn_data.mon_id;

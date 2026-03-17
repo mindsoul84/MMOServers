@@ -14,17 +14,13 @@ struct MonsterSpawnData {
 
 class MonsterDataManager {
 private:
-    std::vector<MonsterSpawnData> monsterSpawnList_;
-
-    // 싱글톤 패턴
-    MonsterDataManager() = default;
+    std::vector<MonsterSpawnData> monsterSpawnList_;    
 
 public:
-    static MonsterDataManager& GetInstance() {
-        static MonsterDataManager instance;
-        return instance;
-    }
 
+    MonsterDataManager() = default;
+    ~MonsterDataManager() = default;
+    
     MonsterDataManager(const MonsterDataManager&) = delete;
     MonsterDataManager& operator=(const MonsterDataManager&) = delete;
 

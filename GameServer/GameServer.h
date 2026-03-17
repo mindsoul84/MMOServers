@@ -17,6 +17,8 @@
 #include "Monster/Monster.h"
 #include "Pathfinder/Pathfinder.h"
 
+#include "../Common/DataManager/DataManager.h"
+
 #pragma pack(push, 1)
 struct PacketHeader {
     uint16_t size;
@@ -42,6 +44,11 @@ struct PlayerInfo {
 // ★ [리팩토링] GameServer의 모든 상태를 관리하는 단일 Context
 // ==========================================
 struct GameContext {
+    // =========================================================
+    // ★ 기존 매니저 Context 내부로 편입
+    // =========================================================
+    DataManager dataManager;
+
     // 1. 코어 네트워크 및 메인 게임 스레드 큐 (1차선 도로)
     boost::asio::io_context io_context;
     boost::asio::io_context::strand game_strand;

@@ -113,16 +113,15 @@ int main() {
         std::cout << "[System] ⚠️ config.json 설정에 따라 DB 연동을 건너뜁니다.\n";
     }
 
-    // ---------------------------------------------------------
-    // 시스템 및 기초 Json 데이터 로드
-    // ---------------------------------------------------------
-    if (!DataManager::GetInstance().LoadAllData("JsonData/")) {
-        std::cerr << "기초 데이터를 불러오지 못해 서버를 종료합니다.\n";
+    // 추가: 한글 세팅이 끝난 안전한 타이밍에 Zone을 생성합니다!
+    auto& ctx = GameContext::Get();
+
+    // ★ monsterDataManger 리팩토링
+    if (!ctx.dataManager.LoadAllData("JsonData/")) {
+        std::cerr << "몬스터 데이터를 불러오지 못해 서버를 종료합니다.\n";
         return -1;
     }
 
-    // 추가: 한글 세팅이 끝난 안전한 타이밍에 Zone을 생성합니다!
-    auto& ctx = GameContext::Get();
     ctx.zone = std::make_unique<Zone>(1000, 1000, 50);
 
     // [추가] 파일이 없으면 즉석에서 만들어주는 제너레이터 가동!
