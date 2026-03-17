@@ -21,26 +21,7 @@
 using boost::asio::ip::tcp;
 
 // =======================================================
-// [1] 설정 로드 함수
-// =======================================================
-bool LoadConfigMode() {
-    try {
-        boost::property_tree::ptree pt;
-#ifdef _DEBUG
-        boost::property_tree::read_json("../Common/config.json", pt);
-#else
-        boost::property_tree::read_json("config.json", pt);
-#endif        
-        return pt.get<bool>("db_conn", false);
-    }
-    catch (const std::exception& e) {
-        std::cerr << "[Warning] config.json 읽기 실패 (기본값 false 적용): " << e.what() << "\n";
-        return false;
-    }
-}
-
-// =======================================================
-// [2] 로그인 처리 함수 (아이디/비번 입력 및 LoginServer 연결)
+// [1] 로그인 처리 함수 (아이디/비번 입력 및 LoginServer 연결)
 // =======================================================
 bool ProcessLogin(tcp::socket& socket, tcp::resolver& resolver, bool use_db, std::string& out_id) {
     std::string my_pw = "";
@@ -99,7 +80,7 @@ bool ProcessLogin(tcp::socket& socket, tcp::resolver& resolver, bool use_db, std
 }
 
 // =======================================================
-// [3] 월드 선택 처리 함수
+// [2] 월드 선택 처리 함수
 // =======================================================
 bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string& out_ip, int& out_port) {
     Protocol::WorldSelectReq ws_req;
@@ -123,7 +104,7 @@ bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string
 }
 
 // =======================================================
-// [4] 백그라운드 수신 스레드 가동 함수
+// [3] 백그라운드 수신 스레드 가동 함수
 // =======================================================
 void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my_x, float& my_y, int& my_hp, std::unordered_map<std::string, std::pair<float, float>>& monster_pos_map) {
     std::thread recv_thread([&socket, my_id, &my_x, &my_y, &my_hp, &monster_pos_map]() {
@@ -156,7 +137,7 @@ void StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my
 }
 
 // =======================================================
-// [5] 액션 모드 (메인 루프) 함수
+// [4] 액션 모드 (메인 루프) 함수
 // =======================================================
 void RunActionLoop(tcp::socket& socket, float& my_x, float& my_y, int& my_hp) {
     std::cout << "\n [액션 모드] 방향키: 이동 / a키: 공격 / Enter: 채팅 / ESC: 종료\n--------------------------------------\n";
@@ -217,15 +198,11 @@ void RunActionLoop(tcp::socket& socket, float& my_x, float& my_y, int& my_hp) {
 }
 
 // =======================================================
-// [6] 메인 함수
+// [5] 메인 함수
 // =======================================================
 int main() {
     SetConsoleOutputCP(CP_UTF8);
     std::cout << "[DummyClient] Start.. Created by Jeong Shin Young\n";
-
-    bool use_db = LoadConfigMode();
-    std::string my_id, session_token, gateway_ip;
-    int gateway_port = 0;
 
     // 가장 먼저 환경 설정(config.json)을 로드합니다.
     if (!ConfigManager::GetInstance().LoadConfig("config.json"))
@@ -234,6 +211,11 @@ int main() {
         system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
         return -1;
     }
+
+    bool use_db = ConfigManager::GetInstance().UseDB();
+    std::string my_id, session_token, gateway_ip;
+    int gateway_port = 0;
+
 
     try {
         boost::asio::io_context io_context;

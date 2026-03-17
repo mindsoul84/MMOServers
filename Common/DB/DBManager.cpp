@@ -1,5 +1,6 @@
 ﻿#include "DBManager.h"
 #include "..\ConfigManager.h"
+#include "..\Utils\CryptoUtils.h"
 #include <iostream>
 
 // ★ 전역 thread_local 변수 실제 메모리 할당 (정의)
@@ -97,10 +98,10 @@ LoginResult DBManager::ProcessLogin(const std::string& id, const std::string& pw
     }
 
     // =========================================================
-    // STEP 1. 계정 존재 여부 및 비밀번호 조회 (Prepared Statement)
+    // STEP 1. 계정 존재 여부 및 해시값/솔트 조회
     // =========================================================
-    // '?' 플레이스홀더를 사용하여 쿼리 구조와 데이터를 완전히 분리합니다.
-    const char* select_sql = "SELECT password FROM Accounts WHERE account_id = ?";
+    // ★ [수정] password_hash와 salt 두 컬럼을 가져옵니다.
+    const char* select_sql = "SELECT password_hash, salt FROM Accounts WHERE account_id = ?";
     SQLRETURN ret = SQLPrepareA(stmt, (SQLCHAR*)select_sql, SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         std::cerr << "[DBManager] SELECT Prepare 실패\n";
@@ -109,39 +110,37 @@ LoginResult DBManager::ProcessLogin(const std::string& id, const std::string& pw
         return LoginResult::DB_ERROR;
     }
 
-    // id 값을 1번 파라미터('?')에 안전하게 바인딩
     SQLLEN id_len = SQL_NTS;
     ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
         50, 0, (SQLPOINTER)id.c_str(), id.size(), &id_len);
-    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        std::cerr << "[DBManager] SELECT BindParameter 실패\n";
-        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
-        return LoginResult::DB_ERROR;
-    }
 
     ret = SQLExecute(stmt);
-    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        std::cerr << "[DBManager] SELECT Execute 실패\n";
-        PrintError(SQL_HANDLE_STMT, stmt);
-        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
-        return LoginResult::DB_ERROR;
-    }
 
-    SQLCHAR db_pw[128] = { 0 };
-    SQLLEN cb_pw = 0;
+    // 결과를 담을 버퍼 준비
+    SQLCHAR db_pw_hash[128] = { 0 };
+    SQLCHAR db_salt[32] = { 0 };
+    SQLLEN cb_pw_hash = 0, cb_salt = 0;
+
     ret = SQLFetch(stmt);
 
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
-        // [계정 존재] → 비밀번호 대조
-        SQLGetData(stmt, 1, SQL_C_CHAR, db_pw, sizeof(db_pw), &cb_pw);
+        // [계정 존재] → 1번 컬럼: hash, 2번 컬럼: salt
+        SQLGetData(stmt, 1, SQL_C_CHAR, db_pw_hash, sizeof(db_pw_hash), &cb_pw_hash);
+        SQLGetData(stmt, 2, SQL_C_CHAR, db_salt, sizeof(db_salt), &cb_salt);
         SQLFreeHandle(SQL_HANDLE_STMT, stmt);
 
-        std::string stored_pw(reinterpret_cast<char*>(db_pw));
-        return (stored_pw == pw) ? LoginResult::SUCCESS : LoginResult::WRONG_PASSWORD;
+        std::string stored_hash(reinterpret_cast<char*>(db_pw_hash));
+        std::string stored_salt(reinterpret_cast<char*>(db_salt));
+
+        // ★ [핵심] 유저가 방금 입력한 평문 비밀번호(pw)를 DB에서 가져온 솔트(stored_salt)와 합쳐 해싱!
+        std::string attempt_hash = CryptoUtils::HashPasswordSHA256(pw, stored_salt);
+
+        // 계산된 해시와 DB에 저장된 해시가 일치하면 로그인 성공
+        return (stored_hash == attempt_hash) ? LoginResult::SUCCESS : LoginResult::WRONG_PASSWORD;
     }
 
     // =========================================================
-    // STEP 2. 계정 없음 → 자동 회원가입 (INSERT Prepared Statement)
+    // STEP 2. 계정 없음 → 자동 회원가입 (신규 해시 및 솔트 생성)
     // =========================================================
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
     stmt = SQL_NULL_HSTMT;
@@ -150,28 +149,31 @@ LoginResult DBManager::ProcessLogin(const std::string& id, const std::string& pw
         return LoginResult::DB_ERROR;
     }
 
-    const char* insert_sql = "INSERT INTO Accounts (account_id, password, input) VALUES (?, ?, ?)";
+    // ★ [핵심] 새로운 솔트 생성 및 비밀번호 해싱
+    std::string new_salt = CryptoUtils::GenerateSalt(16);
+    std::string new_hash = CryptoUtils::HashPasswordSHA256(pw, new_salt);
+
+    // ★ [수정] 쿼리에 password_hash와 salt를 삽입하도록 변경
+    const char* insert_sql = "INSERT INTO Accounts (account_id, password_hash, salt, input) VALUES (?, ?, ?, ?)";
     ret = SQLPrepareA(stmt, (SQLCHAR*)insert_sql, SQL_NTS);
-    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        std::cerr << "[DBManager] INSERT Prepare 실패\n";
-        PrintError(SQL_HANDLE_STMT, stmt);
-        SQLFreeHandle(SQL_HANDLE_STMT, stmt);
-        return LoginResult::DB_ERROR;
-    }
 
     // 1번 파라미터: account_id
-    SQLLEN pw_len = SQL_NTS;
     ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
         50, 0, (SQLPOINTER)id.c_str(), id.size(), &id_len);
 
-    // 2번 파라미터: password
-    SQLLEN pw_bind_len = SQL_NTS;
+    // 2번 파라미터: password_hash
+    SQLLEN hash_len = SQL_NTS;
     ret = SQLBindParameter(stmt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-        100, 0, (SQLPOINTER)pw.c_str(), pw.size(), &pw_bind_len);
+        64, 0, (SQLPOINTER)new_hash.c_str(), new_hash.size(), &hash_len);
 
-    // 3번 파라미터: input (정수형)
+    // 3번 파라미터: salt
+    SQLLEN salt_len = SQL_NTS;
+    ret = SQLBindParameter(stmt, 3, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
+        16, 0, (SQLPOINTER)new_salt.c_str(), new_salt.size(), &salt_len);
+
+    // 4번 파라미터: input (정수형)
     SQLLEN input_len = 0;
-    ret = SQLBindParameter(stmt, 3, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER,
+    ret = SQLBindParameter(stmt, 4, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER,
         0, 0, (SQLPOINTER)&input_type, sizeof(int), &input_len);
 
     ret = SQLExecute(stmt);
