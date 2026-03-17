@@ -73,6 +73,20 @@ void GatewaySession::DoWrite() {
         }));
 }
 
+// ★ [추가] 세션 종료 시 메모리 누수를 방지 중앙 함수
+void GatewaySession::OnDisconnected() {
+    auto& ctx = GameContext::Get();
+    std::lock_guard<std::mutex> lock(ctx.gatewaySessionMutex);
+
+    // std::unordered_set을 사용하므로 std::find 없이 즉시 O(1)로 삭제됩니다!
+    // shared_from_this()를 지워주어야 레퍼런스 카운트가 0이 되어 좀비 세션이 사라집니다.
+    size_t removed = ctx.gatewaySessions.erase(shared_from_this());
+
+    if (removed > 0) {
+        std::cout << "[GameServer] ♻️ Gateway 연결 세션 자원 및 메모리가 안전하게 회수되었습니다.\n";
+    }
+}
+
 void GatewaySession::ReadHeader() {
     auto self(shared_from_this());
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
@@ -94,13 +108,8 @@ void GatewaySession::ReadHeader() {
             }
             else {
                 std::cout << "[GameServer] GatewayServer와의 S2S 연결 해제됨.\n";
-                // ★ [추가] 연결 끊김 시 GameContext의 리스트에서 안전하게 제거
-                auto& ctx = GameContext::Get();
-                std::lock_guard<std::mutex> lock(ctx.gatewaySessionMutex);
-                auto it = std::find(ctx.gatewaySessions.begin(), ctx.gatewaySessions.end(), self);
-                if (it != ctx.gatewaySessions.end()) {
-                    ctx.gatewaySessions.erase(it);
-                }
+                // ★ [수정] 삭제 로직 대신 함수 호출
+                OnDisconnected();
             }
         });
 }
@@ -117,6 +126,8 @@ void GatewaySession::ReadPayload(uint16_t payload_size) {
             }
             else {
                 std::cerr << "[GameServer] 🚨 GatewayServer와의 연결이 끊어졌습니다.\n";
+                // ★ [핵심 수정] 기존에 누락되어 메모리 누수(좀비 세션) 해결!
+                OnDisconnected();
             }
 
         });

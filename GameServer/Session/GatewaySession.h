@@ -35,4 +35,7 @@ private:
 
     // ★ [추가] 큐에서 패킷을 꺼내 실제로 전송하는 내부 함수
     void DoWrite();
+
+    // ★ [추가] 연결 끊김 시 메모리 회수를 전담할 중앙 처리 함수
+    void OnDisconnected();
 };

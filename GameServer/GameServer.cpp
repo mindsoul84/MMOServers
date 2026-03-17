@@ -42,7 +42,7 @@ private:
                 auto new_session = std::make_shared<GatewaySession>(std::move(socket));
                 {
                     std::lock_guard<std::mutex> lock(GameContext::Get().gatewaySessionMutex);
-                    GameContext::Get().gatewaySessions.push_back(new_session);
+                    GameContext::Get().gatewaySessions.insert(new_session);
                 }
                 new_session->start();
             }

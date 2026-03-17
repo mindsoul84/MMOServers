@@ -56,7 +56,7 @@ struct GameContext {
 
     // 4. S2S 커넥션 관리
     std::shared_ptr<WorldConnection> worldConnection;
-    std::vector<std::shared_ptr<GatewaySession>> gatewaySessions;
+    std::unordered_set<std::shared_ptr<GatewaySession>> gatewaySessions;
     std::mutex gatewaySessionMutex;
 
     // 5. 인게임 월드 상태 데이터
