@@ -190,7 +190,8 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     // 데미지 연산 및 적용
     int damage = p_atk - target_monster->GetDef();
     if (damage < 1) damage = 1;
-    target_monster->TakeDamage(damage);
+    
+    int remain_hp = target_monster->TakeDamage(damage);
 
     std::cout << "[Combat] ⚔️ 유저(" << account_id << ")가 몬스터(ID:"
         << target_monster->GetId() << ") 공격! 데미지: " << damage << "\n";
@@ -201,7 +202,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     s2s_res.set_target_uid(target_monster->GetId());
     s2s_res.set_target_account_id("MONSTER_" + std::to_string(target_monster->GetId()));
     s2s_res.set_damage(damage);
-    s2s_res.set_target_remain_hp(target_monster->GetHp());
+    s2s_res.set_target_remain_hp(remain_hp);
 
     auto aoi_uids = ctx.zone->GetPlayersInAOI(p_x, p_y);
     {
@@ -216,7 +217,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
 
-    if (target_monster->GetHp() <= 0) {
+    if (remain_hp <= 0) {
         std::cout << "[System] 💀 몬스터(ID:" << target_monster->GetId() << ")가 쓰러졌습니다!\n";
         target_monster->Die();
     }

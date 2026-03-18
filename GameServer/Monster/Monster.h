@@ -99,10 +99,12 @@ public:
     
 
     // 피격 시 체력 차감 함수
-    void TakeDamage(int damage) {
+    int TakeDamage(int damage) {
         std::lock_guard<std::mutex> lock(mtx_); // ★ 데미지 입을 때 락
         hp_ -= damage;
         if (hp_ < 0) hp_ = 0;
+
+        return hp_;
     }
 
     // 사망 처리
