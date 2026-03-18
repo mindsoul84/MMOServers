@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional> // 콜백 함수 사용을 위함
 #include <memory>     // ★ 비동기 콜백 시 생명주기 보장을 위함
+#include <mutex>
 
 /* 
 * Monster 수정 (안전망 추가) : Monster 객체가 비동기 작업 중에도 스스로 수명을 연장할 수 있도록
@@ -23,6 +24,8 @@ enum class MonsterState {
 class Monster : public std::enable_shared_from_this<Monster> {
 
 private:
+    mutable std::mutex mtx_;    // ☆ [추가] 몬스터 개별 락 (Fine-grained Lock) ★
+
     uint64_t monster_id_;
     Vector3 position_;
     Vector3 spawn_position_; // [추가] 몬스터가 원래 태어난 고향 좌표
@@ -81,20 +84,30 @@ public:
     // =========================================================
     // ★ [추가] 유저 -> 몬스터 타격(전투)을 위한 Getter 및 사망 로직
     // =========================================================
-    int GetHp() const { return hp_; }
+    int GetHp() const {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return hp_;
+    }
+    int SetHp(int par_hp) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return hp_ += par_hp;
+    }
+
     int GetAtk() const { return attack_power_; }
     int GetDef() const { return defense_power_; }
 
-    int SetHp(int par_hp) { return hp_ += par_hp; }
+    
 
     // 피격 시 체력 차감 함수
     void TakeDamage(int damage) {
+        std::lock_guard<std::mutex> lock(mtx_); // ★ 데미지 입을 때 락
         hp_ -= damage;
         if (hp_ < 0) hp_ = 0;
     }
 
     // 사망 처리
     void Die() {
+        std::lock_guard<std::mutex> lock(mtx_); // ★ 죽을 때 락
         hp_ = 0;
         state_ = MonsterState::DEAD;
     }

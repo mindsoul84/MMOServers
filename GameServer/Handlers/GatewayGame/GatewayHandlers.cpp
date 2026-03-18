@@ -15,11 +15,6 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
     auto& ctx = GameContext::Get();
 
-    // ===================================================
-    // 상태 변경(쓰기)이 일어나므로 unique_lock으로 보호
-    // ===================================================
-    std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);
-
     std::string acc_id = req->account_id();
     float new_x = req->x();
     float new_y = req->y();
@@ -34,38 +29,71 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
     if (new_y > 1000.0f) new_y = 1000.0f; // Zone 생성 시 설정한 최대 Height
     // =========================================================
 
-    if (ctx.playerMap.find(acc_id) == ctx.playerMap.end()) {
-        uint64_t new_uid = ctx.uidCounter++;
-        ctx.playerMap[acc_id] = { new_uid, new_x, new_y };
-        ctx.uidToAccount[new_uid] = acc_id;
-        ctx.zone->EnterZone(new_uid, new_x, new_y);
-        std::cout << "[GameServer] 유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")\n";
+    std::shared_ptr<PlayerInfo> player_ptr;
+
+    // =========================================================
+    // ★ 1단계: 글로벌 읽기 락(shared_lock)으로 유저가 있는지 확인만 함 (병목 0%)
+    // =========================================================
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        auto it = ctx.playerMap.find(acc_id);
+        if (it != ctx.playerMap.end()) player_ptr = it->second;
     }
-    else {
-        auto& info = ctx.playerMap[acc_id];
-        ctx.zone->UpdatePosition(info.uid, info.x, info.y, new_x, new_y);
-        info.x = new_x;
-        info.y = new_y;
+
+    // =========================================================
+    // ★ 2단계: 유저가 없다면 신규 진입이므로 이때만 짧게 글로벌 쓰기 락! (Double-checked)
+    // =========================================================
+    if (!player_ptr) {
+        std::unique_lock<std::shared_mutex> write_lock(ctx.gameStateMutex);
+        auto it = ctx.playerMap.find(acc_id); // 혹시 그 찰나에 남이 넣었나 다시 검사
+        if (it == ctx.playerMap.end()) {
+            uint64_t new_uid = ctx.uidCounter++;
+            player_ptr = std::make_shared<PlayerInfo>(); // ★ 포인터 할당
+            player_ptr->uid = new_uid;
+            player_ptr->x = new_x;
+            player_ptr->y = new_y;
+
+            ctx.playerMap[acc_id] = player_ptr;
+            ctx.uidToAccount[new_uid] = acc_id;
+            ctx.zone->EnterZone(new_uid, new_x, new_y);
+            std::cout << "[GameServer] 유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")\n";
+        }
+        else {
+            player_ptr = it->second;
+        }
+    }
+
+    // =========================================================
+    // ★ 3단계: 이미 있는 유저의 좌표 갱신은 '유저 개인의 락'만 잡고 실행!
+    // 남들은 자유롭게 서버를 이용할 수 있습니다.
+    // =========================================================
+    {
+        std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+        ctx.zone->UpdatePosition(player_ptr->uid, player_ptr->x, player_ptr->y, new_x, new_y);
+        player_ptr->x = new_x;
+        player_ptr->y = new_y;
     }
 
     auto aoi_uids = ctx.zone->GetPlayersInAOI(new_x, new_y);
-
     Protocol::GameGatewayMoveRes s2s_res;
     s2s_res.set_account_id(acc_id);
     s2s_res.set_x(new_x);
     s2s_res.set_y(new_y);
 
-    for (uint64_t target_uid : aoi_uids) {
-        auto it = ctx.uidToAccount.find(target_uid);
-        if (it != ctx.uidToAccount.end()) {
-            s2s_res.add_target_account_ids(it->second);
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex); // ★ 아이디 조회용 짧은 읽기 락
+        for (uint64_t target_uid : aoi_uids) {
+            auto it = ctx.uidToAccount.find(target_uid);
+            if (it != ctx.uidToAccount.end()) {
+                s2s_res.add_target_account_ids(it->second);
+            }
         }
     }
     session->Send(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
 }
 
 
-// [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러
+// [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러 (맵 삭제가 일어나므로 쓰기 락 유지)
 void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::GatewayGameLeaveReq>();
     if (!req->ParseFromArray(payload, payloadSize)) return;
@@ -78,9 +106,9 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
     std::string acc_id = req->account_id();
     auto it = ctx.playerMap.find(acc_id);
     if (it != ctx.playerMap.end()) {
-        uint64_t uid = it->second.uid;
-        float last_x = it->second.x;
-        float last_y = it->second.y;
+        uint64_t uid = it->second->uid;
+        float last_x = it->second->x;
+        float last_y = it->second->y;
 
         ctx.zone->LeaveZone(uid, last_x, last_y);
         ctx.uidToAccount.erase(uid);
@@ -96,16 +124,29 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     if (!req->ParseFromArray(payload, size)) return;
 
     auto& ctx = GameContext::Get();
-    
-    std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);   // 쓰기 락 적용
-
-    // 공격 처리도 상태(Player, Monster)를 변경하므로 반드시 strand 안에서 실행해야 합니다!
+       
     std::string account_id = req->account_id();
+    std::shared_ptr<PlayerInfo> player_ptr;
 
-    auto it_player = ctx.playerMap.find(account_id);
-    if (it_player == ctx.playerMap.end()) return;
+    // ★ 유저 존재 확인 (읽기 락)
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        auto it_player = ctx.playerMap.find(account_id);
+        if (it_player == ctx.playerMap.end()) return;
+        player_ptr = it_player->second;
+    }
 
-    PlayerInfo& player = it_player->second;
+    // ★ 내 정보 복사 (내 자물쇠 걸고 안전하게 빼옴)
+    float p_x, p_y;
+    int p_atk;
+    uint64_t p_uid;
+    {
+        std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+        p_x = player_ptr->x;
+        p_y = player_ptr->y;
+        p_atk = player_ptr->atk;
+        p_uid = player_ptr->uid;
+    }
 
     // 타겟 몬스터 탐색
     std::shared_ptr<Monster> target_monster = nullptr;
@@ -114,29 +155,32 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     // =========================================================
     // 전체 순회(O(N)) 제거! Zone 기반 O(1) 탐색!
     // =========================================================
-    auto aoi_mon_ids = ctx.zone->GetMonstersInAOI(player.x, player.y);
+    auto aoi_mon_ids = ctx.zone->GetMonstersInAOI(p_x, p_y);
 
-    for (uint64_t mon_id : aoi_mon_ids) {
-        auto it_mon = ctx.monsterMap.find(mon_id);
-        if (it_mon == ctx.monsterMap.end()) continue;
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        for (uint64_t mon_id : aoi_mon_ids) {
+            auto it_mon = ctx.monsterMap.find(mon_id);
+            if (it_mon == ctx.monsterMap.end()) continue;
 
-        auto& mon = it_mon->second;
-        if (mon->GetState() == MonsterState::DEAD) continue;
+            auto& mon = it_mon->second;
+            if (mon->GetState() == MonsterState::DEAD) continue;
 
-        float dx = player.x - mon->GetPosition().x;
-        float dy = player.y - mon->GetPosition().y;
-        float dist = std::sqrt(dx * dx + dy * dy);
+            float dx = p_x - mon->GetPosition().x;
+            float dy = p_y - mon->GetPosition().y;
+            float dist = std::sqrt(dx * dx + dy * dy);
 
-        if (dist <= min_dist) {
-            target_monster = mon;
-            min_dist = dist;
+            if (dist <= min_dist) {
+                target_monster = mon;
+                min_dist = dist;
+            }
         }
     }
 
     // 사거리 내에 몬스터가 없을 경우
     if (!target_monster) {
         Protocol::GameGatewayAttackRes fail_res;
-        fail_res.set_attacker_uid(player.uid);
+        fail_res.set_attacker_uid(p_uid);
         fail_res.set_damage(0);
         fail_res.add_target_account_ids(account_id);
         ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, fail_res);
@@ -144,7 +188,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     }
 
     // 데미지 연산 및 적용
-    int damage = player.atk - target_monster->GetDef();
+    int damage = p_atk - target_monster->GetDef();
     if (damage < 1) damage = 1;
     target_monster->TakeDamage(damage);
 
@@ -153,19 +197,22 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     // 주변 유저에게 전투 결과 브로드캐스트
     Protocol::GameGatewayAttackRes s2s_res;
-    s2s_res.set_attacker_uid(player.uid);
+    s2s_res.set_attacker_uid(p_uid);
     s2s_res.set_target_uid(target_monster->GetId());
     s2s_res.set_target_account_id("MONSTER_" + std::to_string(target_monster->GetId()));
     s2s_res.set_damage(damage);
     s2s_res.set_target_remain_hp(target_monster->GetHp());
 
-    auto aoi_uids = ctx.zone->GetPlayersInAOI(player.x, player.y);
-    for (uint64_t uid : aoi_uids) {
-        auto target_acc = ctx.uidToAccount.find(uid);
-        if (target_acc != ctx.uidToAccount.end()) {
-            s2s_res.add_target_account_ids(target_acc->second);
+    auto aoi_uids = ctx.zone->GetPlayersInAOI(p_x, p_y);
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        for (uint64_t uid : aoi_uids) {
+            auto target_acc = ctx.uidToAccount.find(uid);
+            if (target_acc != ctx.uidToAccount.end()) {
+                s2s_res.add_target_account_ids(target_acc->second);
+            }
         }
-    }
+    }    
 
     ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
 

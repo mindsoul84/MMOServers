@@ -45,16 +45,35 @@ void InitMonsters() {
 
         mon->SetOnAttackCallback([](uint64_t attacker_uid, uint64_t target_uid, int damage) {
             auto& ctx_inner = GameContext::Get(); // ★ 콜백 내부용 컨텍스트 소환
+            std::shared_ptr<PlayerInfo> player_ptr;
+            std::string acc_id_str;
 
-            auto it_acc = ctx_inner.uidToAccount.find(target_uid);
-            if (it_acc == ctx_inner.uidToAccount.end()) return;
+            // ★ 유저 찾기 (읽기 락)
+            {
+                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.gameStateMutex);
+                auto it_acc = ctx_inner.uidToAccount.find(target_uid);
+                if (it_acc == ctx_inner.uidToAccount.end()) return;
+                acc_id_str = it_acc->second;
 
-            auto it_player = ctx_inner.playerMap.find(it_acc->second);
-            if (it_player == ctx_inner.playerMap.end()) return;
+                auto it_player = ctx_inner.playerMap.find(it_acc->second);
+                if (it_player == ctx_inner.playerMap.end()) return;
+                player_ptr = it_player->second;
+            }
 
-            // 유저의 HP 차감 연산
-            it_player->second.hp -= damage;
-            if (it_player->second.hp < 0) it_player->second.hp = 0;
+            int remain_hp = 0;
+            float p_x, p_y;
+
+            // ★ 유저 체력 깎기 (개별 유저 락)
+            {
+                std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+
+                // 유저의 HP 차감 연산
+                player_ptr->hp -= damage;
+                if (player_ptr->hp < 0) player_ptr->hp = 0;
+                remain_hp = player_ptr->hp;
+                p_x = player_ptr->x;
+                p_y = player_ptr->y;
+            }
 
             // =====================================================================
             // ★ [버그 픽스] 죽었든 살았든, 무조건 '타격 결과(ATTACK_RES)'부터 먼저 쏩니다!
@@ -63,11 +82,11 @@ void InitMonsters() {
             Protocol::GameGatewayAttackRes s2s_res;
             s2s_res.set_attacker_uid(attacker_uid);
             s2s_res.set_target_uid(target_uid);
-            s2s_res.set_target_account_id(it_acc->second);
+            s2s_res.set_target_account_id(acc_id_str);
             s2s_res.set_damage(damage);
-            s2s_res.set_target_remain_hp(it_player->second.hp);
+            s2s_res.set_target_remain_hp(remain_hp);
 
-            auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(it_player->second.x, it_player->second.y);
+            auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(p_x, p_y);
             for (uint64_t aoi_uid : aoi_uids) {
                 auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
                 if (target_acc != ctx_inner.uidToAccount.end()) {
@@ -77,41 +96,41 @@ void InitMonsters() {
 
             ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
 
-            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << it_acc->second
-                << ")를 공격! 데미지: " << damage << ", 남은 체력: " << it_player->second.hp << "\n";
+            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << acc_id_str
+                << ")를 공격! 데미지: " << damage << ", 남은 체력: " << remain_hp << "\n";
 
             // =====================================================================
             // ★ 2. 만약 이번 타격으로 유저가 기절했다면, 그 직후에 텔레포트(MOVE_RES)를 쏩니다.
             // =====================================================================
-            if (it_player->second.hp <= 0) {
-                std::cout << "\n[System] 💀 당신(" << it_acc->second << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
+            if (remain_hp <= 0) {
+                std::cout << "\n[System] 💀 당신(" << acc_id_str << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
 
-                float old_x = it_player->second.x;
-                float old_y = it_player->second.y;
+                float old_x = p_x;
+                float old_y = p_y;
 
-                // HP 회복 및 좌표 초기화 (마을)
-                it_player->second.hp = 100;
-                it_player->second.x = 0.0f;
-                it_player->second.y = 0.0f;
+                {
+                    std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+                    // HP 회복 및 좌표 초기화 (마을)
+                    player_ptr->hp = 100;
+                    player_ptr->x = 0.0f;
+                    player_ptr->y = 0.0f;
+                }
 
                 // 물리 엔진(Zone)에서도 유저를 마을로 순간이동
                 ctx_inner.zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
 
                 Protocol::GameGatewayMoveRes teleport_res;
-                teleport_res.set_account_id(it_acc->second);
+                teleport_res.set_account_id(acc_id_str);
                 teleport_res.set_x(0.0f);
                 teleport_res.set_y(0.0f);
                 teleport_res.set_z(0.0f);
                 teleport_res.set_yaw(0.0f);
-                teleport_res.add_target_account_ids(it_acc->second);
+                teleport_res.add_target_account_ids(acc_id_str);
 
                 ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, teleport_res);
                 return;
             }
-
-
-            
-            });
+        });
 
         // ==========================================================
         // ★ [추가] JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여!
@@ -144,10 +163,10 @@ void ScheduleNextAITick() {
         float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
         g_last_ai_time = current_time;
 
-        // =========================================================
-        // ★ [추가] AI가 몬스터 좌표를 바꾸고 유저 맵을 조회하므로 락!
-        // =========================================================
-        std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);
+        // ======================================================================================================
+        // ★ 읽기 락(shared_lock)으로 수정 : 몬스터 내부의 개별 락과 Zone 내부의 락이 모든 동시성 통제
+        // ======================================================================================================
+        std::shared_lock<std::shared_mutex> lock(ctx.gameStateMutex);
 
         for (auto& mon : ctx.monsters) {
 
@@ -197,10 +216,10 @@ void ScheduleNextAITick() {
                     if (it_acc != ctx.uidToAccount.end()) {
                         auto it_player = ctx.playerMap.find(it_acc->second);
                         if (it_player != ctx.playerMap.end()) {
-                            float dx = it_player->second.x - old_x;
-                            float dy = it_player->second.y - old_y;
+                            float dx = it_player->second->x - old_x;
+                            float dy = it_player->second->y - old_y;
                             if (std::sqrt(dx * dx + dy * dy) < 1.0f) {
-                                mon->SetTarget(uid, { it_player->second.x, it_player->second.y, 0.0f });
+                                mon->SetTarget(uid, { it_player->second->x, it_player->second->y, 0.0f });
                                 break;
                             }
                         }
@@ -214,10 +233,10 @@ void ScheduleNextAITick() {
                 if (it_acc != ctx.uidToAccount.end()) {
                     auto it_player = ctx.playerMap.find(it_acc->second);
                     if (it_player != ctx.playerMap.end()) {
-                        float dx = it_player->second.x - old_x;
-                        float dy = it_player->second.y - old_y;
+                        float dx = it_player->second->x - old_x;
+                        float dy = it_player->second->y - old_y;
                         if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
-                            mon->UpdateTargetPosition({ it_player->second.x, it_player->second.y, 0.0f });
+                            mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
                             target_found = true;
                         }
                     }
@@ -231,10 +250,10 @@ void ScheduleNextAITick() {
                 if (it_acc != ctx.uidToAccount.end()) {
                     auto it_player = ctx.playerMap.find(it_acc->second);
                     if (it_player != ctx.playerMap.end()) {
-                        float dx = it_player->second.x - old_x;
-                        float dy = it_player->second.y - old_y;
+                        float dx = it_player->second->x - old_x;
+                        float dy = it_player->second->y - old_y;
                         if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
-                            mon->UpdateTargetPosition({ it_player->second.x, it_player->second.y, 0.0f });
+                            mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
                             target_found = true;
                         }
                     }

@@ -39,6 +39,15 @@ struct PlayerInfo {
     int hp = 100;
     int atk = 30;
     int def = 5;
+
+    // ☆ 유저 개별 락 (Fine-grained Lock) ★
+    std::mutex mtx; 
+
+    PlayerInfo() = default;
+
+    // mutex는 복사/이동이 불가능하므로 삭제 처리
+    PlayerInfo(const PlayerInfo&) = delete;
+    PlayerInfo& operator=(const PlayerInfo&) = delete;
 };
 
 // ==========================================
@@ -74,7 +83,7 @@ struct GameContext {
     NavMesh navMesh;
     std::vector<std::shared_ptr<Monster>> monsters;
 
-    std::unordered_map<std::string, PlayerInfo> playerMap;  // account_id -> PlayerInfo
+    std::unordered_map<std::string, std::shared_ptr<PlayerInfo>> playerMap;  // account_id -> PlayerInfo
     std::unordered_map<uint64_t, std::shared_ptr<Monster>> monsterMap;
 
     std::unordered_map<uint64_t, std::string> uidToAccount; // uid -> account_id
