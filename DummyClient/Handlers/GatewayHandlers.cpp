@@ -67,11 +67,17 @@ void HandleAttackRes(const std::vector<char>& p, const std::string& my_id, float
         if (attack_res.damage() == 0) {
             std::cout << "\n[System] 범위에 벗어나 공격에 실패했습니다.\n";
         }
+        // 1. 내가 맞은 경우 (몬스터 -> 나)
         else if (attack_res.target_account_id() == my_id) {
             my_hp = attack_res.target_remain_hp();
             std::cout << "\n🩸 [전투] 몬스터에게 " << attack_res.damage() << " 데미지를 입었습니다!\n";
             if (my_hp <= 0) std::cout << "💀 체력이 0이 되어 기절했습니다...\n";
         }
+        // 2. 다른 유저가 맞는 것을 구경하는 경우 (몬스터 -> 다른 유저)
+        else if (attack_res.target_account_id().find("MONSTER_") != 0) {
+            std::cout << "\n[관전] 🛡️ 다른 유저(" << attack_res.target_account_id() << ")가 몬스터에게 피격당했습니다!\n";
+        }
+        // 3. 내가(혹은 남이) 몬스터를 때린 경우 (유저 -> 몬스터)
         else {
             std::cout << "\n[Combat] ⚔️ 몬스터(" << attack_res.target_account_id() << ") 타격 성공! 데미지: " << attack_res.damage() << " (남은 체력: " << attack_res.target_remain_hp() << ")\n";
             if (attack_res.target_remain_hp() <= 0) {

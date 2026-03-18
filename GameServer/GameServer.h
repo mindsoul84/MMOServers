@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <mutex>
+#include <shared_mutex> // Read-Write Lock을 위한 헤더
 
 #pragma warning(push)
 #pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
@@ -49,9 +50,11 @@ struct GameContext {
     // =========================================================
     DataManager dataManager;
 
-    // 1. 코어 네트워크 및 메인 게임 스레드 큐 (1차선 도로)
+    // 1. 코어 네트워크 및 메인 게임 스레드 큐
     boost::asio::io_context io_context;
-    boost::asio::io_context::strand game_strand;
+
+    // ★ [핵심] Lock 모델 도입: 플레이어 맵과 몬스터 맵 등을 보호할 중앙 상태 락(Read-Write Lock)
+    mutable std::shared_mutex gameStateMutex;
 
     // 2. AI 전용 비동기 길찾기 큐
     boost::asio::io_context ai_io_context;
@@ -72,6 +75,8 @@ struct GameContext {
     std::vector<std::shared_ptr<Monster>> monsters;
 
     std::unordered_map<std::string, PlayerInfo> playerMap;  // account_id -> PlayerInfo
+    std::unordered_map<uint64_t, std::shared_ptr<Monster>> monsterMap;
+
     std::unordered_map<uint64_t, std::string> uidToAccount; // uid -> account_id
     uint64_t uidCounter = 1;
 
@@ -86,8 +91,7 @@ struct GameContext {
 
 private:
     GameContext()
-        : game_strand(io_context),
-        ai_work_guard(boost::asio::make_work_guard(ai_io_context)) {
+        : ai_work_guard(boost::asio::make_work_guard(ai_io_context)) {
     }
 };
 

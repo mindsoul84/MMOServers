@@ -13,10 +13,15 @@
 struct Sector {
     mutable std::shared_mutex mutex_;
     std::unordered_set<uint64_t> players_;
+    std::unordered_set<uint64_t> monsters_;
 
     void AddPlayer(uint64_t player_id);
     void RemovePlayer(uint64_t player_id);
     std::vector<uint64_t> GetPlayers() const;
+
+    void AddMonster(uint64_t mon_id);
+    void RemoveMonster(uint64_t mon_id);
+    std::vector<uint64_t> GetMonsters() const;
 };
 
 // ---------------------------------------------------------
@@ -40,16 +45,15 @@ public:
 
     // 좌표를 격자 인덱스로 변환
     bool GetSectorIndex(float x, float y, int& out_row, int& out_col) const;
+    
+    void EnterZone(uint64_t player_id, float x, float y);   // 유저 입장    
+    void LeaveZone(uint64_t player_id, float x, float y);   // 유저 퇴장    
+    void UpdatePosition(uint64_t player_id, float old_x, float old_y, float new_x, float new_y);    // 유저 이동 시 섹터 갱신    
+    std::vector<uint64_t> GetPlayersInAOI(float x, float y) const;  // 내 주변(AOI) 유저 목록 가져오기
 
-    // 유저 입장
-    void EnterZone(uint64_t player_id, float x, float y);
-
-    // 유저 퇴장
-    void LeaveZone(uint64_t player_id, float x, float y);
-
-    // 유저 이동 시 섹터 갱신
-    void UpdatePosition(uint64_t player_id, float old_x, float old_y, float new_x, float new_y);
-
-    // 내 주변(AOI) 유저 목록 가져오기
-    std::vector<uint64_t> GetPlayersInAOI(float x, float y) const;
+    // ★ [추가] 몬스터 전용 Zone 관리 함수
+    void EnterZoneMonster(uint64_t player_id, float x, float y);   // 몬스터 입장
+    void LeaveZoneMonster(uint64_t player_id, float x, float y);   // 몬스터 퇴장
+    void UpdatePositionMonster(uint64_t player_id, float old_x, float old_y, float new_x, float new_y);    // 몬스터 이동 시 섹터 갱신
+    std::vector<uint64_t> GetMonstersInAOI(float x, float y) const;  // 몬스터 주변(AOI) 목록 가져오기
 };

@@ -5,6 +5,7 @@
 
 // 최대 패킷 크기 고정 (예: 4KB)
 constexpr size_t MAX_PACKET_SIZE = 4096;
+constexpr int    BUFFER_SIZE = 10000;
 
 // 재사용될 고정 크기 버퍼 객체
 struct SendBuffer {
@@ -20,9 +21,9 @@ private:
     // Boost의 Lock-Free Queue를 사용하여 병목을 완벽히 제거
     boost::lockfree::queue<SendBuffer*> pool_;
 
-    SendBufferPool() : pool_(10000) { // 큐 용량 1만 개 설정
+    SendBufferPool() : pool_(BUFFER_SIZE) { // 큐 용량 1만 개 설정
         // 서버 시작 시 미리 1만 개의 버퍼를 힙에 올려둠 (Pre-allocation)
-        for (int i = 0; i < 10000; ++i) {
+        for (int i = 0; i < BUFFER_SIZE; ++i) {
             pool_.push(new SendBuffer());
         }
     }

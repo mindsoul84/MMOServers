@@ -181,7 +181,7 @@ void Monster::CalculatePath() {
         std::vector<Vector3> result_waypoints = current_nav->FindPath(start_pos, end_pos);
 
         // 2. 연산이 끝나면, 메인 게임 Strand(GameContext)로 결과 보고
-        boost::asio::post(GameContext::Get().game_strand, [self, result_waypoints]() {
+        boost::asio::post(GameContext::Get().io_context, [self, result_waypoints]() {
 
             if (self->state_ == MonsterState::DEAD) return;
 

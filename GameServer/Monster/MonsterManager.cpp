@@ -14,6 +14,7 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <cmath>
 #include <boost/asio.hpp>
@@ -68,11 +69,9 @@ void InitMonsters() {
 
             auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(it_player->second.x, it_player->second.y);
             for (uint64_t aoi_uid : aoi_uids) {
-                if (aoi_uid < 10000) {
-                    auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
-                    if (target_acc != ctx_inner.uidToAccount.end()) {
-                        s2s_res.add_target_account_ids(target_acc->second);
-                    }
+                auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
+                if (target_acc != ctx_inner.uidToAccount.end()) {
+                    s2s_res.add_target_account_ids(target_acc->second);
                 }
             }
 
@@ -124,7 +123,8 @@ void InitMonsters() {
         mon->SetSpawnPosition(spawn_data.x, spawn_data.y, 0.0f);
 
         ctx.monsters.push_back(mon);
-        ctx.zone->EnterZone(mon_id, mon->GetPosition().x, mon->GetPosition().y);
+        ctx.monsterMap[mon_id] = mon;   // O(1) 검색용 맵에 등록        
+        ctx.zone->EnterZoneMonster(mon_id, mon->GetPosition().x, mon->GetPosition().y); // ★ [수정] 몬스터 전용 Zone 함수 사용
 
         std::cout << "  -> [스폰] 몬스터(ID:" << mon_id << ", HP:" << spawn_data.hp << ", 리스폰:" << spawn_data.respawn_sec << "초) 생성됨." <<
                      " 좌표 (X:" << mon->GetPosition().x << ", Y:" << mon->GetPosition().y << ")\n";
@@ -135,8 +135,7 @@ void InitMonsters() {
 void ScheduleNextAITick() {
     g_ai_timer->expires_after(std::chrono::milliseconds(100));
 
-    // ★ g_game_strand -> ctx.game_strand 로 변경
-    g_ai_timer->async_wait(boost::asio::bind_executor(GameContext::Get().game_strand, [](const boost::system::error_code& ec) {
+    g_ai_timer->async_wait([](const boost::system::error_code& ec) {
         if (ec) return;
 
         auto& ctx = GameContext::Get(); // ★ 타이머 콜백 내부용 컨텍스트 소환
@@ -144,6 +143,11 @@ void ScheduleNextAITick() {
         auto current_time = std::chrono::steady_clock::now();
         float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
         g_last_ai_time = current_time;
+
+        // =========================================================
+        // ★ [추가] AI가 몬스터 좌표를 바꾸고 유저 맵을 조회하므로 락!
+        // =========================================================
+        std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);
 
         for (auto& mon : ctx.monsters) {
 
@@ -189,17 +193,15 @@ void ScheduleNextAITick() {
             if (mon->GetState() == MonsterState::IDLE) {
                 auto aoi_uids = ctx.zone->GetPlayersInAOI(old_x, old_y);
                 for (uint64_t uid : aoi_uids) {
-                    if (uid < 10000) {
-                        auto it_acc = ctx.uidToAccount.find(uid);
-                        if (it_acc != ctx.uidToAccount.end()) {
-                            auto it_player = ctx.playerMap.find(it_acc->second);
-                            if (it_player != ctx.playerMap.end()) {
-                                float dx = it_player->second.x - old_x;
-                                float dy = it_player->second.y - old_y;
-                                if (std::sqrt(dx * dx + dy * dy) < 1.0f) {
-                                    mon->SetTarget(uid, { it_player->second.x, it_player->second.y, 0.0f });
-                                    break;
-                                }
+                    auto it_acc = ctx.uidToAccount.find(uid);
+                    if (it_acc != ctx.uidToAccount.end()) {
+                        auto it_player = ctx.playerMap.find(it_acc->second);
+                        if (it_player != ctx.playerMap.end()) {
+                            float dx = it_player->second.x - old_x;
+                            float dy = it_player->second.y - old_y;
+                            if (std::sqrt(dx * dx + dy * dy) < 1.0f) {
+                                mon->SetTarget(uid, { it_player->second.x, it_player->second.y, 0.0f });
+                                break;
                             }
                         }
                     }
@@ -246,7 +248,7 @@ void ScheduleNextAITick() {
             float new_y = mon->GetPosition().y;
 
             if (std::abs(old_x - new_x) > 0.05f || std::abs(old_y - new_y) > 0.05f) {
-                ctx.zone->UpdatePosition(mon->GetId(), old_x, old_y, new_x, new_y);
+                ctx.zone->UpdatePositionMonster(mon->GetId(), old_x, old_y, new_x, new_y);
                 g_sync_timers[mon->GetId()] += delta_time;
 
                 if (g_sync_timers[mon->GetId()] >= NETWORK_SYNC_INTERVAL) {
@@ -274,7 +276,7 @@ void ScheduleNextAITick() {
         }
 
         ScheduleNextAITick();
-        }));
+        });
 }
 
 void StartAITickThread() {

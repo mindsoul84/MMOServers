@@ -21,6 +21,22 @@ std::vector<uint64_t> Sector::GetPlayers() const {
     return std::vector<uint64_t>(players_.begin(), players_.end());
 }
 
+// ★ [추가] Sector 몬스터 구현부
+void Sector::AddMonster(uint64_t mon_id) {
+    std::unique_lock<std::shared_mutex> lock(mutex_);
+    monsters_.insert(mon_id);
+}
+
+void Sector::RemoveMonster(uint64_t mon_id) {
+    std::unique_lock<std::shared_mutex> lock(mutex_);
+    monsters_.erase(mon_id);
+}
+
+std::vector<uint64_t> Sector::GetMonsters() const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return std::vector<uint64_t>(monsters_.begin(), monsters_.end());
+}
+
 
 // =========================================================
 // Zone 구현부
@@ -108,4 +124,41 @@ std::vector<uint64_t> Zone::GetPlayersInAOI(float x, float y) const {
         }
     }
     return aoi_players;
+}
+
+// ★ Zone 몬스터 구현부
+void Zone::EnterZoneMonster(uint64_t mon_id, float x, float y) {
+    int row, col;
+    if (GetSectorIndex(x, y, row, col)) grid_[row][col]->AddMonster(mon_id);
+}
+
+void Zone::LeaveZoneMonster(uint64_t mon_id, float x, float y) {
+    int row, col;
+    if (GetSectorIndex(x, y, row, col)) grid_[row][col]->RemoveMonster(mon_id);
+}
+
+void Zone::UpdatePositionMonster(uint64_t mon_id, float old_x, float old_y, float new_x, float new_y) {
+    int old_row, old_col, new_row, new_col;
+    if (GetSectorIndex(old_x, old_y, old_row, old_col) && GetSectorIndex(new_x, new_y, new_row, new_col)) {
+        if (old_row != new_row || old_col != new_col) {
+            grid_[old_row][old_col]->RemoveMonster(mon_id);
+            grid_[new_row][new_col]->AddMonster(mon_id);
+        }
+    }
+}
+
+std::vector<uint64_t> Zone::GetMonstersInAOI(float x, float y) const {
+    std::vector<uint64_t> aoi_monsters;
+    int center_row, center_col;
+    if (!GetSectorIndex(x, y, center_row, center_col)) return aoi_monsters;
+
+    for (int r = center_row - 1; r <= center_row + 1; ++r) {
+        for (int c = center_col - 1; c <= center_col + 1; ++c) {
+            if (r >= 0 && r < rows_ && c >= 0 && c < cols_) {
+                auto mons_in_sector = grid_[r][c]->GetMonsters();
+                aoi_monsters.insert(aoi_monsters.end(), mons_in_sector.begin(), mons_in_sector.end());
+            }
+        }
+    }
+    return aoi_monsters;
 }
