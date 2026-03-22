@@ -149,7 +149,7 @@ int main() {
     try {
         //boost::asio::io_context io_context;
 
-        // 1. S2S 서버 객체 생성 (포트: 9000)
+        // S2S 서버 객체 생성 (포트: 9000)
         short game_port = ConfigManager::GetInstance().GetGameServerPort();
         GameNetworkServer server(ctx.io_context, game_port);
         std::cout << "[System] 코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young\n";
@@ -162,12 +162,44 @@ int main() {
         ctx.worldConnection->Connect("127.0.0.1", world_port);
         // =========================================================
 
-        // 2. CPU 코어 개수에 맞춰 스레드 개수 설정
+        // CPU 코어 개수에 맞춰 스레드 개수 설정
         unsigned int max_thread_count = ConfigManager::GetInstance().GetGameMaxThreadCount();
         if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
         std::cout << "[System] 워커 스레드 개수 설정: " << max_thread_count << "개\n";
 
-        // 3. 스레드 풀 생성 및 io_context.run() 실행
+#ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+        // =========================================================
+        // 워치독(Watchdog) 데드락 감시 스레드
+        // =========================================================
+        std::thread watchdog_thread([]() {
+            uint64_t last_count = 0;
+
+            while (true) {
+                // 5초마다 깨어나서 서버 상태를 검사합니다.
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+
+                auto& ctx = GameContext::Get();
+                uint64_t current_count = ctx.processed_packet_count.load();
+                int bot_count = ctx.connected_bot_count.load(); // 봇 카운트 가져오기
+
+                // 유저(봇)가 1명이라도 접속해 있는데, 5초 동안 처리한 패킷이 0개라면?!
+                if (bot_count > 0 && current_count == last_count) {
+                    std::cerr << "\n🚨🚨 [Watchdog] FATAL ERROR: 5초간 처리된 패킷이 0개입니다! 서버 스레드 데드락(Deadlock) 발생!!! 🚨🚨\n\n";
+                }
+                else if (bot_count > 0) {
+                    // 정상 작동 중일 때의 TPS(5초간) 출력
+                    std::cout << "⏱️ [Watchdog] 서버 정상 틱 동작 중 (5초간 처리량: "
+                        << (current_count - last_count) << " pkts)\n";
+                }
+
+                last_count = current_count;
+            }
+            });
+        watchdog_thread.detach(); // 백그라운드에서 영원히 돌게 둡니다.
+        // =========================================================
+#endif//DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+
+        // 스레드 풀 생성 및 io_context.run() 실행
         std::cout << "[System] 여러 스레드에서 io_context.run()을 호출하여 스레드 풀을 구성합니다...\n";
         std::vector<std::thread> threads;
         for (unsigned int i = 0; i < max_thread_count; ++i) {

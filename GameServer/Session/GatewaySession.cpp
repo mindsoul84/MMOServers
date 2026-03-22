@@ -15,6 +15,51 @@ void GatewaySession::start() {
 void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
 
+#ifdef  DEF_STRESS_TEST_TOOL
+    // =========================================================
+    // 🚀 [부하 테스트 전용 모드] 메모리 폭발 방지를 위한 가변 크기 버퍼
+    // =========================================================
+    uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
+    uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
+
+    // 버퍼 크기 초과 시 서버 죽지 않도록 에러 로그만 띄우고 취소
+    if (totalSize > MAX_PACKET_SIZE) {
+        std::cerr << "🚨 [Error] 패킷 크기 초과! (PktID: " << pktId
+            << ", Size: " << totalSize << " bytes) - 전송 취소\n";
+        return;
+    }
+
+    // ★ 핵심: MemoryPool을 거치지 않고, 가변 길이 생성자(exact_size)를 사용하여 딱 필요한 만큼만 할당!
+    auto send_buf = std::make_shared<SendBuffer>(totalSize);
+
+    PacketHeader header{ totalSize, pktId };
+    memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
+    msg.SerializeToArray(send_buf->buffer_.data() + sizeof(PacketHeader), payloadSize);
+
+    auto self(shared_from_this());
+
+    // ★ [수정] 람다 캡처에 totalSize를 추가합니다.
+    boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
+        // [Backpressure] 큐가 100000개 이상 쌓이면 서버가 뻗지 않도록 패킷 드랍
+        if (send_queue_.size() > 100000) {
+            std::cerr << "🚨 [Warning] GatewaySession Send Queue 폭발! 전송 드랍.\n";
+            return;
+        }
+
+        bool write_in_progress = !send_queue_.empty();
+
+        // =========================================================
+        // 큐의 형식에 맞게 버퍼와 사이즈를 pair로 넣습니다! (emplace_back 사용)
+        // =========================================================
+        send_queue_.emplace_back(send_buf, totalSize);
+
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
+
+#else//DEF_STRESS_TEST_TOOL
+
     std::string payload;
     msg.SerializeToString(&payload);
     PacketHeader header;
@@ -45,6 +90,8 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
             DoWrite();
         }
     });
+
+#endif//DEF_STRESS_TEST_TOOL
 }
 
 // ★ [추가] 실제 비동기 전송을 수행하는 함수
@@ -92,7 +139,7 @@ void GatewaySession::ReadHeader() {
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
-                if (header_.size < sizeof(PacketHeader) || header_.size > 4096) return;
+                if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) return;
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
 
                 if (payload_size == 0) {

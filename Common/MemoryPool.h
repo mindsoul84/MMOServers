@@ -3,6 +3,20 @@
 #include <memory>
 #include <boost/lockfree/queue.hpp>
 
+#include "../Common/Define/Define_StressTestTool.h"
+
+
+#ifdef  DEF_STRESS_TEST_TOOL
+constexpr size_t MAX_PACKET_SIZE = 65535;
+constexpr int    BUFFER_SIZE = 10000;
+
+// 재사용될 고정 크기 버퍼 객체
+struct SendBuffer {
+    std::vector<char> buffer_;
+    SendBuffer(size_t exact_size) { buffer_.resize(exact_size); }
+    SendBuffer() { buffer_.resize(MAX_PACKET_SIZE); }
+};
+#else //DEF_STRESS_TEST_TOOL
 // 최대 패킷 크기 고정 (예: 4KB)
 constexpr size_t MAX_PACKET_SIZE = 4096;
 constexpr int    BUFFER_SIZE = 10000;
@@ -12,6 +26,7 @@ struct SendBuffer {
     std::vector<char> buffer_;
     SendBuffer() { buffer_.resize(MAX_PACKET_SIZE); }
 };
+#endif//DEF_STRESS_TEST_TOOL
 
 // ==========================================
 // ★ Lock-Free 버퍼 풀 (오브젝트 풀)

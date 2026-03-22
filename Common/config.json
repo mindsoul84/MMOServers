@@ -26,5 +26,13 @@
 	},
 	"world_server_info": {
 		"world_server_port": 7000
+	},
+	"stress_test_tool_info": {
+		"target_connections": 3000,
+		"spawn_rate": 100,
+		"worker_threads": 4,
+		"login_server_ip": "127.0.0.1",
+		"login_server_port": 7777,
+		"bot_action_per": 70
 	}
 }

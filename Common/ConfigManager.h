@@ -29,6 +29,13 @@ private:
 
     short world_server_port_;
 
+    // StressTestTool
+    int stress_target_connections_;
+    int stress_spawn_rate_;
+    int stress_worker_threads_;
+    std::string stress_login_server_ip_;
+    short stress_login_server_port_;
+
     // 싱글톤 패턴
     ConfigManager() = default;
 
@@ -74,6 +81,13 @@ public:
 
             world_server_port_ = pt.get<short>("world_server_info.world_server_port");
 
+            // StressTestTool
+            stress_target_connections_ = pt.get<int>("stress_test_tool_info.target_connections");
+            stress_spawn_rate_ = pt.get<int>("stress_test_tool_info.spawn_rate");
+            stress_worker_threads_ = pt.get<int>("stress_test_tool_info.worker_threads");
+            stress_login_server_ip_ = pt.get<std::string>("stress_test_tool_info.login_server_ip");
+            stress_login_server_port_ = pt.get<short>("stress_test_tool_info.login_server_port");
+
             std::cout << "[ConfigManager] 환경 설정 로드 성공! (DB 연동: "
                 << (db_conn_ ? "ON" : "OFF") << ")\n";
             if (db_conn_) {
@@ -112,4 +126,12 @@ public:
     int GetLoginDbThreadCount() const { return login_db_thread_count_; }
 
     short GetWorldServerPort() const { return world_server_port_; }
+
+    // StressTestTool
+    int GetStressTargetConnections() const { return stress_target_connections_; }
+    int GetStressSpawnRate() const { return stress_spawn_rate_; }
+    int GetStressWorkerThreads() const { return stress_worker_threads_; }
+    const std::string& GetStressLoginServerIp() const { return stress_login_server_ip_; }
+    short GetStressLoginServerPort() const { return stress_login_server_port_; }
+
 };

@@ -89,6 +89,12 @@ struct GameContext {
     std::unordered_map<uint64_t, std::string> uidToAccount; // uid -> account_id
     uint64_t uidCounter = 1;
 
+#ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+    std::atomic<uint64_t> processed_packet_count{ 0 };  // 워치독 데드락 감지용 패킷 처리 카운터
+
+    std::atomic<int> connected_bot_count{ 0 };          // 현재 접속 중인 Stress 봇의 수를 추적하는 변수
+#endif//DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+
     // 싱글톤
     static GameContext& Get() {
         static GameContext instance;

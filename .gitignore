@@ -20,3 +20,4 @@ GatewayServer/x64/Debug/GatewayServer.ilk
 /LoginServer/x64
 /WorldServer/x64
 *.config
+/StressTestTool/x64
