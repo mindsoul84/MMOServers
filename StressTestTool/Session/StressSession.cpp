@@ -1,7 +1,7 @@
 #include "StressSession.h"
-#include "StressManager.h"
-#include "../Common/ConfigManager.h"
-#include "../Common/Define/Define_StressTestTool.h"
+#include "../Manager/StressManager.h"
+#include "../../Common/ConfigManager.h"
+#include "../../Common/Define/Define_StressTestTool.h"
 
 #include <iostream>
 #include <random>
@@ -23,19 +23,21 @@ void StressSession::Start() {
 }
 
 void StressSession::Stop() {
-    
     auto self = shared_from_this();
-    
-    // 세션 정리를 strand_ 내부에서 안전하게 실행
+
+    // Stop 호출 또한 strand 안에서 안전하게 처리합니다.
     boost::asio::post(strand_, [this, self]() {
-        if (state_ == BotState::IN_GAME) {
-            manager_->OnSessionDisconnected();
+
+        if (state_ != BotState::DISCONNECTED)
+        {            
+            manager_->OnSessionDisconnected(self, state_ == BotState::IN_GAME);     // 매니저에게 나를 지우고 새로 스폰해달라고 알림
+            state_ = BotState::DISCONNECTED;
         }
-        state_ = BotState::DISCONNECTED;
+
         boost::system::error_code ec;
         socket_.close(ec);
         action_timer_.cancel();
-        send_queue_.clear(); // 남은 패킷 폐기
+        send_queue_.clear();
     });
 }
 
@@ -90,15 +92,19 @@ void StressSession::ConnectToGateway(const std::string& ip, short port) {
 void StressSession::ReadHeader() {
     auto self = shared_from_this();
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
-        [self](boost::system::error_code ec, std::size_t) {
-            if (!ec) {
-                // [픽스] 람다 내부에서 멤버 변수 접근 시 self-> 사용
-                self->ReadPayload(self->header_.size - sizeof(PacketHeader));
+
+        // ReadHeader 람다에도 bind_executor 누락 복구!
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec)
+            {
+                ReadPayload(header_.size - sizeof(PacketHeader));
             }
-            else {
-                self->Stop();
+            else
+            {
+                Stop();
             }
-        });
+        })
+    );
 }
 
 // 로그인 -> 게이트웨이 환승 중이 아니면 계속 수신 대기

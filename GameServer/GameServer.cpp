@@ -86,8 +86,20 @@ void StartAIThreadPool(int ai_thread_count) {
 // 4. 메인 함수: 스레드 풀 구성 및 서버 실행
 // ==========================================
 int main() {
+
     // 윈도우 콘솔 한글 깨짐 방지
     SetConsoleOutputCP(CP_UTF8);
+
+    // =========================================================
+    // ★ [중복 실행 방지] 고유한 이름의 Named Mutex 생성
+    // =========================================================
+    HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\GameServer_Unique_Mutex_Lock");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        std::cerr << "🚨 [Error] GameServer가 이미 실행 중입니다. 창을 닫습니다.\n";
+        CloseHandle(hMutex);
+        return 1;
+    }
+    // =========================================================
 
     // 1. 가장 먼저 환경 설정(config.json)을 로드합니다.
     if (!ConfigManager::GetInstance().LoadConfig("config.json"))

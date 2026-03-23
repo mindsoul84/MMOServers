@@ -7,16 +7,19 @@
 #pragma warning(push)
 #pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
 #include <boost/asio.hpp>
-#include "../Common/Protocol/protocol.pb.h"
+#include "../../Common/Protocol/protocol.pb.h"
 #pragma warning(pop)
+
+class StressManager;
 
 // =========================================================
 // 봇 AI 행동 확률 설정 (1~100 기준)
 // =========================================================
-const std::string BOT_PASSWORD = "1234";
-constexpr int BOT_ACTION_MOVE_PER = 70; // 70% 확률 이동, 나머지(30%) 확률 공격
-constexpr int BOT_MIN_ACTION_DELAY_MS = 2000;  // 최소 대기 시간 (밀리초)
-constexpr int BOT_MAX_ACTION_DELAY_MS = 4000; // 최대 대기 시간 (밀리초)
+inline constexpr const char* BOT_PASSWORD = "1234";
+
+constexpr int BOT_ACTION_MOVE_PER = 70;         // 70% 확률 이동, 나머지(30%) 확률 공격
+constexpr int BOT_MIN_ACTION_DELAY_MS = 2000;   // 최소 대기 시간 (밀리초)
+constexpr int BOT_MAX_ACTION_DELAY_MS = 4000;   // 최대 대기 시간 (밀리초)
 
 // 가상 유저의 현재 상태
 enum class BotState {

@@ -53,8 +53,20 @@ class LoginServer {
         }
 };
 
-int main() {
+int main() {    
+    
     SetConsoleOutputCP(CP_UTF8);
+
+    // =========================================================
+    // ★ [중복 실행 방지] 고유한 이름의 Named Mutex 생성
+    // =========================================================
+    HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\LoginServer_Unique_Mutex_Lock");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        std::cerr << "🚨 [Error] LoginServer가 이미 실행 중입니다. 창을 닫습니다.\n";
+        CloseHandle(hMutex);
+        return 1;
+    }
+    // =========================================================
 
     if (!ConfigManager::GetInstance().LoadConfig("config.json"))
     {
