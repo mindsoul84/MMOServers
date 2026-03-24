@@ -22,3 +22,5 @@ GatewayServer/x64/Debug/GatewayServer.ilk
 *.config
 /StressTestTool/x64
 *.dll
+Common/Protocol/protocol.pb.cc
+Common/Protocol/protocol.pb.h
