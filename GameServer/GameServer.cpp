@@ -1,4 +1,4 @@
-#include "GameServer.h"
+﻿#include "GameServer.h"
 #include "Session/GatewaySession.h"
 #include "Network/WorldConnection.h"
 #include "Handlers/GatewayGame/GatewayHandlers.h"
@@ -133,7 +133,11 @@ int main() {
         return -1;
     }
 
-    ctx.zone = std::make_unique<Zone>(1000, 1000, 50);
+    ctx.zone = std::make_unique<Zone>(
+        static_cast<int>(GameConstants::Map::WIDTH), 
+        static_cast<int>(GameConstants::Map::HEIGHT), 
+        GameConstants::Map::SECTOR_SIZE
+    );
 
     // [추가] 파일이 없으면 즉석에서 만들어주는 제너레이터 가동!
     GenerateDummyMapFile("dummy_map.bin");

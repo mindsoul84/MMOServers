@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <boost/asio.hpp>
 #include <google/protobuf/message.h>
 

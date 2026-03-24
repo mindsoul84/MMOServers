@@ -1,4 +1,4 @@
-#pragma once // 중복 포함 방지 (현대 C++ 표준 격)
+﻿#pragma once // 중복 포함 방지 (현대 C++ 표준 격)
 
 #include <vector>
 #include <unordered_set>

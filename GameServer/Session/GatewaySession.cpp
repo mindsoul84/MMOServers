@@ -1,4 +1,4 @@
-#include "GatewaySession.h"
+﻿#include "GatewaySession.h"
 #include "..\GameServer\GameServer.h"
 #include "../../Common/MemoryPool.h"
 #include <iostream>

@@ -1,4 +1,4 @@
-#include "StressManager.h"
+﻿#include "StressManager.h"
 #include "../Session/StressSession.h"
 #include <iostream>
 

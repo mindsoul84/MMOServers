@@ -1,8 +1,9 @@
-#include "GatewayHandlers.h"
+﻿#include "GatewayHandlers.h"
 #include "../../GameServer.h"
 #include "../../Session/GatewaySession.h"
 #include "../../Monster/Monster.h" // 몬스터 공격 처리를 위해 추가
 #include "../../../Common/Define/Define_Server.h"
+#include "../../../Common/Define/GameConstants.h"  // ★ [추가] 게임 상수
 
 #include <iostream>
 #include <boost/asio/post.hpp>
@@ -22,11 +23,11 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
     float new_x = req->x();
     float new_y = req->y();
 
-    // 맵 이탈 방지
+    // 맵 이탈 방지 (상수 사용)
     if (new_x < 0.0f) new_x = 0.0f;
     if (new_y < 0.0f) new_y = 0.0f;
-    if (new_x > 1000.0f) new_x = 1000.0f;
-    if (new_y > 1000.0f) new_y = 1000.0f;
+    if (new_x > GameConstants::Map::WIDTH) new_x = GameConstants::Map::WIDTH;
+    if (new_y > GameConstants::Map::HEIGHT) new_y = GameConstants::Map::HEIGHT;
 
     std::shared_ptr<PlayerInfo> player_ptr;
 
@@ -99,7 +100,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
         for (uint64_t target_uid : aoi_uids)
         {
-            if (broadcast_limit++ >= 20) break;
+            if (broadcast_limit++ >= GameConstants::Network::MAX_AOI_BROADCAST) break;
             auto it = ctx.uidToAccount.find(target_uid);
             if (it != ctx.uidToAccount.end())
             {
@@ -124,12 +125,12 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
     // =========================================================
     // ★ [버그 픽스] 맵 이탈(음수 좌표 및 최대 크기 초과) 방지 로직 
-    // 맵 크기(1000x1000) 밖으로 나가려고 하면 강제로 벽에 붙여버립니다.
+    // 맵 크기 밖으로 나가려고 하면 강제로 벽에 붙여버립니다.
     // =========================================================
     if (new_x < 0.0f) new_x = 0.0f;
     if (new_y < 0.0f) new_y = 0.0f;
-    if (new_x > 1000.0f) new_x = 1000.0f; // Zone 생성 시 설정한 최대 Width
-    if (new_y > 1000.0f) new_y = 1000.0f; // Zone 생성 시 설정한 최대 Height
+    if (new_x > GameConstants::Map::WIDTH) new_x = GameConstants::Map::WIDTH;
+    if (new_y > GameConstants::Map::HEIGHT) new_y = GameConstants::Map::HEIGHT;
     // =========================================================
 
     std::shared_ptr<PlayerInfo> player_ptr;
@@ -305,7 +306,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     }
 
     std::shared_ptr<Monster> target_monster = nullptr;
-    float min_dist = 1.5f;
+    float min_dist = GameConstants::Combat::PLAYER_ATTACK_RANGE;
 
     auto aoi_mon_ids = ctx.zone->GetMonstersInAOI(p_x, p_y);
 
@@ -365,7 +366,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
         int broadcast_limit = 0;
         for (uint64_t uid : aoi_uids)
         {
-            if (broadcast_limit++ >= 20) break;
+            if (broadcast_limit++ >= GameConstants::Network::MAX_AOI_BROADCAST) break;
             auto target_acc = ctx.uidToAccount.find(uid);
             if (target_acc != ctx.uidToAccount.end()) {
                 s2s_res.add_target_account_ids(target_acc->second);
@@ -414,7 +415,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     // 타겟 몬스터 탐색
     std::shared_ptr<Monster> target_monster = nullptr;
-    float min_dist = 1.5f;
+    float min_dist = GameConstants::Combat::PLAYER_ATTACK_RANGE;
 
     // =========================================================
     // 전체 순회(O(N)) 제거! Zone 기반 O(1) 탐색!

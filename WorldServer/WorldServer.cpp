@@ -1,8 +1,9 @@
-#include "../WorldServer/WorldServer.h"
+﻿#include "../WorldServer/WorldServer.h"
 #include "AdminAPI/AdminService.h"
 #include "Handlers/WorldHandlers.h"
 #include "../Common/MemoryPool.h"
 #include "../Common/ConfigManager.h"
+#include "../Common/Utils/NetworkErrorHandler.h"
 
 #include <iostream>
 #include <windows.h>
@@ -27,7 +28,10 @@ void ServerSession::start() {
 }
 
 void ServerSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
-    if (!socket_.is_open()) return;
+    if (!socket_.is_open()) {
+        std::cerr << "[WorldServer] ⚠️ Send 시도했으나 소켓이 이미 닫혀있음 (PktID: " << pktId << ")\n";
+        return;
+    }
 
     std::string payload;
     msg.SerializeToString(&payload);
@@ -43,8 +47,17 @@ void ServerSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
 
     auto self(shared_from_this());
     boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf](boost::system::error_code ec, std::size_t) {
-            if (ec) std::cerr << "[WorldServer] S2S 패킷 전송 실패\n";
+        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
+            if (ec) {
+                auto result = NetworkUtils::HandleError(
+                    "ServerSession::Send(PktID:" + std::to_string(pktId) + ")", 
+                    ec
+                );
+                if (result.should_disconnect) {
+                    // 세션 정리는 ReadHeader에서 수행
+                    std::cerr << "[WorldServer] S2S 패킷 전송 실패로 연결 종료 예정\n";
+                }
+            }
         });
 }
 
@@ -53,7 +66,10 @@ void ServerSession::ReadHeader() {
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
-                if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) return;
+                if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) {
+                    std::cerr << "[WorldServer] ⚠️ 잘못된 패킷 헤더 크기: " << header_.size << "\n";
+                    return;
+                }
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
 
                 if (payload_size == 0) {
@@ -67,7 +83,12 @@ void ServerSession::ReadHeader() {
                 }
             }
             else {
-                std::cout << "[WorldServer] 연동된 서버(LoginServer 등)와의 연결이 해제되었습니다.\n";
+                auto result = NetworkUtils::HandleError("ServerSession::ReadHeader", ec);
+                if (result.should_disconnect || 
+                    NetworkUtils::ClassifyError(ec) != NetworkUtils::ErrorSeverity::IGNORED_ERROR) {
+                    std::cout << "[WorldServer] 연동된 서버와의 연결이 해제되었습니다.\n";
+                    OnDisconnected();
+                }
             }
         });
 }
@@ -81,7 +102,24 @@ void ServerSession::ReadPayload(uint16_t payload_size) {
                 g_s2s_dispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }
+            else {
+                auto result = NetworkUtils::HandleError("ServerSession::ReadPayload", ec);
+                if (result.should_disconnect || 
+                    NetworkUtils::ClassifyError(ec) != NetworkUtils::ErrorSeverity::IGNORED_ERROR) {
+                    OnDisconnected();
+                }
+            }
         });
+}
+
+// ★ [추가] 세션 정리 함수
+void ServerSession::OnDisconnected() {
+    std::lock_guard<std::mutex> lock(g_serverSessionMutex);
+    auto it = std::find(g_serverSessions.begin(), g_serverSessions.end(), shared_from_this());
+    if (it != g_serverSessions.end()) {
+        g_serverSessions.erase(it);
+        std::cout << "[WorldServer] ♻️ 서버 세션 자원이 안전하게 회수되었습니다.\n";
+    }
 }
 
 // ==========================================

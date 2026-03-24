@@ -1,4 +1,4 @@
-#include "CryptoUtils.h"
+﻿#include "CryptoUtils.h"
 #include <windows.h>
 #include <wincrypt.h>
 #include <random>

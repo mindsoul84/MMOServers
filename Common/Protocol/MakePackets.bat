@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 > nul
 echo ==============================================
 echo Protobuf C++ 클래스 생성 중...

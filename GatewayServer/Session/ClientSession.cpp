@@ -1,6 +1,7 @@
-#include "ClientSession.h"
+﻿#include "ClientSession.h"
 #include "../Network/GameConnection.h"
 #include "..\Common\MemoryPool.h"
+#include "..\Common\Utils\NetworkErrorHandler.h"
 #include <iostream>
 
 ClientSession::ClientSession(boost::asio::ip::tcp::socket socket) noexcept : socket_(std::move(socket)) {}
@@ -11,7 +12,10 @@ void ClientSession::SetAccountId(const std::string& id) { account_id_ = id; }
 const std::string& ClientSession::GetAccountId() const { return account_id_; }
 
 void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
-    if (!socket_.is_open()) return;
+    if (!socket_.is_open()) {
+        std::cerr << "[Gateway] ⚠️ Send 시도했으나 소켓이 이미 닫혀있음 (PktID: " << pktId << ")\n";
+        return;
+    }
 
 #ifdef  DEF_STRESS_TEST_TOOL
 
@@ -36,7 +40,17 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
 
     auto self(shared_from_this());
     boost::asio::async_write(socket_, boost::asio::buffer(send_buf->data(), totalSize),
-        [this, self, send_buf](boost::system::error_code ec, std::size_t) {});
+        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
+            if (ec) {
+                auto result = NetworkUtils::HandleError(
+                    "ClientSession::Send(PktID:" + std::to_string(pktId) + ")", 
+                    ec
+                );
+                if (result.should_disconnect) {
+                    OnDisconnected();
+                }
+            }
+        });
 
 #else //DEF_STRESS_TEST_TOOL
 
@@ -54,7 +68,17 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
 
     auto self(shared_from_this());
     boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf](boost::system::error_code ec, std::size_t) {});
+        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
+            if (ec) {
+                auto result = NetworkUtils::HandleError(
+                    "ClientSession::Send(PktID:" + std::to_string(pktId) + ")", 
+                    ec
+                );
+                if (result.should_disconnect) {
+                    OnDisconnected();
+                }
+            }
+        });
 
 #endif//DEF_STRESS_TEST_TOOL    
 }
@@ -83,7 +107,10 @@ void ClientSession::ReadHeader() {
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
-                if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) return;
+                if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) {
+                    std::cerr << "[Gateway] ⚠️ 잘못된 패킷 헤더 크기: " << header_.size << "\n";
+                    return;
+                }
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
                 if (payload_size == 0) {
                     auto session_ptr = self;
@@ -96,7 +123,13 @@ void ClientSession::ReadHeader() {
                     ReadPayload(payload_size);
                 }
             }
-            else OnDisconnected();
+            else {
+                auto result = NetworkUtils::HandleError("ClientSession::ReadHeader", ec);
+                if (result.should_disconnect || 
+                    NetworkUtils::ClassifyError(ec) != NetworkUtils::ErrorSeverity::IGNORED_ERROR) {
+                    OnDisconnected();
+                }
+            }
         });
 }
 
@@ -110,6 +143,12 @@ void ClientSession::ReadPayload(uint16_t payload_size) {
                 GatewayContext::Get().clientDispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }
-            else OnDisconnected();
+            else {
+                auto result = NetworkUtils::HandleError("ClientSession::ReadPayload", ec);
+                if (result.should_disconnect || 
+                    NetworkUtils::ClassifyError(ec) != NetworkUtils::ErrorSeverity::IGNORED_ERROR) {
+                    OnDisconnected();
+                }
+            }
         });
 }

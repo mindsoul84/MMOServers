@@ -1,4 +1,4 @@
-#include "GameConnection.h"
+﻿#include "GameConnection.h"
 #include "..\Common\MemoryPool.h"
 #include <iostream>
 #include <string>

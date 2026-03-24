@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <boost/asio.hpp>
 #include <memory>
@@ -25,19 +25,63 @@ struct PacketHeader {
 class Session;
 class WorldConnection;
 
-// =================================================================================================
-// ★ DB 스레드 풀 및 큐 설정 : 메인 네트워크 스레드만 사용 시 LoginServer DB 블로킹 병목 현상 고려
-// =================================================================================================
-extern boost::asio::io_context g_db_io_context;
+// ==========================================
+// ★ [리팩토링] LoginServer의 모든 상태를 관리하는 단일 Context
+// GameServer와 동일한 패턴으로 통일
+// ==========================================
+struct LoginContext {
+    // ---------------------------------------------------------
+    // 1. DB 전용 io_context (블로킹 방지)
+    // ---------------------------------------------------------
+    boost::asio::io_context db_io_context;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> db_work_guard;
+
+    // ---------------------------------------------------------
+    // 2. 클라이언트 연결 관리
+    // ---------------------------------------------------------
+    std::atomic<int> connected_clients{ 0 };
+    std::unordered_set<std::string> loggedInUsers;
+    std::unordered_map<std::string, std::shared_ptr<Session>> sessionMap;
+    std::mutex loginMutex;
+
+    // ---------------------------------------------------------
+    // 3. 패킷 디스패처
+    // ---------------------------------------------------------
+    PacketDispatcher<Session> clientDispatcher;
+    PacketDispatcher<WorldConnection> worldDispatcher;
+
+    // ---------------------------------------------------------
+    // 4. S2S 커넥션
+    // ---------------------------------------------------------
+    std::shared_ptr<WorldConnection> worldConnection;
+
+    // ---------------------------------------------------------
+    // 싱글톤 접근자
+    // ---------------------------------------------------------
+    static LoginContext& Get() {
+        static LoginContext instance;
+        return instance;
+    }
+
+private:
+    LoginContext()
+        : db_work_guard(boost::asio::make_work_guard(db_io_context)) {
+    }
+
+    // 복사/이동 금지
+    LoginContext(const LoginContext&) = delete;
+    LoginContext& operator=(const LoginContext&) = delete;
+};
 
 // ==========================================
-// ★ 전역 변수 extern 선언
+// ★ [하위 호환성] 기존 전역 변수 참조를 위한 매크로
+// 점진적 마이그레이션을 위해 유지 (향후 제거 권장)
 // ==========================================
-extern std::atomic<int> g_connected_clients;
-extern std::unordered_set<std::string> g_loggedInUsers;
-extern std::unordered_map<std::string, std::shared_ptr<Session>> g_sessionMap;
-extern std::mutex g_loginMutex;
-
-extern PacketDispatcher<Session> g_client_dispatcher;
-extern PacketDispatcher<WorldConnection> g_world_dispatcher;
-extern std::shared_ptr<WorldConnection> g_worldConnection;
+#define g_db_io_context       (LoginContext::Get().db_io_context)
+#define g_connected_clients   (LoginContext::Get().connected_clients)
+#define g_loggedInUsers       (LoginContext::Get().loggedInUsers)
+#define g_sessionMap          (LoginContext::Get().sessionMap)
+#define g_loginMutex          (LoginContext::Get().loginMutex)
+#define g_client_dispatcher   (LoginContext::Get().clientDispatcher)
+#define g_world_dispatcher    (LoginContext::Get().worldDispatcher)
+#define g_worldConnection     (LoginContext::Get().worldConnection)

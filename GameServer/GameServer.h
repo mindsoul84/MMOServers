@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <boost/asio.hpp>
 #include <memory>
@@ -19,6 +19,7 @@
 #include "Pathfinder/Pathfinder.h"
 
 #include "../Common/DataManager/DataManager.h"
+#include "../Common/Define/GameConstants.h"  // ★ [추가] 게임 상수 정의
 
 #pragma pack(push, 1)
 struct PacketHeader {
@@ -36,9 +37,9 @@ class WorldConnection;
 struct PlayerInfo {
     uint64_t uid;
     float x, y;
-    int hp = 100;
-    int atk = 30;
-    int def = 5;
+    int hp = GameConstants::Player::DEFAULT_HP;
+    int atk = GameConstants::Player::DEFAULT_ATK;
+    int def = GameConstants::Player::DEFAULT_DEF;
 
     // ☆ 유저 개별 락 (Fine-grained Lock) ★
     std::mutex mtx; 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <string>
 
 // 윈도우 콘솔 문자열(CP949)을 UTF-8로 변환하는 함수

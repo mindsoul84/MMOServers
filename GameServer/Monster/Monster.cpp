@@ -1,5 +1,6 @@
-#include "Monster.h"
+﻿#include "Monster.h"
 #include "../GameServer.h" // ★ [추가] GameContext 접근용
+#include "../../Common/Define/GameConstants.h" // ★ [추가] 상수 정의
 #include <iostream>
 #include <boost/asio.hpp>
 
@@ -11,9 +12,13 @@
 Monster::Monster(uint64_t id, NavMesh* navmesh)
     : monster_id_(id), state_(MonsterState::IDLE), navmesh_(navmesh),
     target_user_id_(0), path_index_(0),
-    hp_(100), max_hp_(100), attack_power_(15), // 기본 공격력 15,
-    defense_power_(10), // 기본 방어력 10
-    attack_range_(0.5f), attack_cooldown_(2.0f), attack_timer_(2.0f), // 첫 타격은 즉시 때리도록 타이머를 꽉 채워둠
+    hp_(GameConstants::Monster::DEFAULT_HP), 
+    max_hp_(GameConstants::Monster::DEFAULT_HP), 
+    attack_power_(GameConstants::Monster::DEFAULT_ATK),
+    defense_power_(GameConstants::Monster::DEFAULT_DEF),
+    attack_range_(GameConstants::Monster::ATTACK_RANGE), 
+    attack_cooldown_(GameConstants::Monster::ATTACK_COOLDOWN), 
+    attack_timer_(GameConstants::Monster::ATTACK_COOLDOWN), // 첫 타격은 즉시 때리도록 타이머를 꽉 채워둠
     spawn_position_({ 0.0f, 0.0f, 0.0f }), target_last_pos_({ 0.0f, 0.0f, 0.0f })
 {
     position_ = { 0.0f, 0.0f, 0.0f };
@@ -95,7 +100,7 @@ void Monster::UpdateChase(float delta_time) {
     if (current_path_.empty() || path_index_ >= current_path_.size()) return;
 
     Vector3 next_waypoint = current_path_[path_index_];
-    float speed = 2.0f;
+    float speed = GameConstants::Monster::MOVE_SPEED;
 
     float dx = next_waypoint.x - position_.x;
     float dy = next_waypoint.y - position_.y;
@@ -107,7 +112,7 @@ void Monster::UpdateChase(float delta_time) {
         return;
     }
 
-    if (distance < 0.1f) {
+    if (distance < GameConstants::AI::WAYPOINT_EPSILON) {
         path_index_++;
         return;
     }
@@ -126,13 +131,13 @@ void Monster::UpdateReturn(float delta_time) {
     }
 
     Vector3 next_waypoint = current_path_[path_index_];
-    float speed = 2.0f;
+    float speed = GameConstants::Monster::MOVE_SPEED;
 
     float dx = next_waypoint.x - position_.x;
     float dy = next_waypoint.y - position_.y;
     float distance = std::sqrt(dx * dx + dy * dy);
 
-    if (distance < 0.1f) {
+    if (distance < GameConstants::AI::WAYPOINT_EPSILON) {
         path_index_++;
         return;
     }
@@ -165,7 +170,7 @@ void Monster::UpdateAttack(float delta_time) {
 }
 
 // ==========================================
-// ★ [수정] 길찾기 연산 비동기 처리 (GameContext 위임)
+// ★ [수정] 길찾기 연산 비동기 처리 (버전 검증으로 Race Condition 방지)
 // ==========================================
 void Monster::CalculatePath() {
     if (!navmesh_) return;
@@ -175,15 +180,37 @@ void Monster::CalculatePath() {
     Vector3 end_pos = target_last_pos_;
     NavMesh* current_nav = navmesh_;
 
+    // ★ [핵심] 요청 시점의 버전 번호를 증가시키고 캡처합니다.
+    uint64_t request_version = ++path_request_version_;
+    MonsterState request_state = state_;  // 요청 시점의 상태도 캡처
+
     // 1. 메인 스레드(Strand) -> AI 스레드 풀(GameContext)에 무거운 작업 위임
-    boost::asio::post(GameContext::Get().ai_io_context, [self, start_pos, end_pos, current_nav]() {
+    boost::asio::post(GameContext::Get().ai_io_context, [self, start_pos, end_pos, current_nav, request_version, request_state]() {
 
         std::vector<Vector3> result_waypoints = current_nav->FindPath(start_pos, end_pos);
 
         // 2. 연산이 끝나면, 메인 게임 Strand(GameContext)로 결과 보고
-        boost::asio::post(GameContext::Get().io_context, [self, result_waypoints]() {
+        boost::asio::post(GameContext::Get().io_context, [self, result_waypoints, request_version, request_state]() {
 
+            // =========================================================
+            // ★ [Race Condition 방지] 버전 검증
+            // 비동기 결과가 도착했을 때, 요청 당시의 버전과 현재 버전이 다르면
+            // 이미 새로운 경로 요청이 발생한 것이므로 이 결과는 무시합니다.
+            // =========================================================
+            if (self->path_request_version_.load() != request_version) {
+                // 오래된 결과 - 무시
+                return;
+            }
+
+            // 상태가 DEAD로 바뀌었으면 무시
             if (self->state_ == MonsterState::DEAD) return;
+
+            // ★ [추가] 상태가 변경되었으면 무시 (CHASE 요청했는데 RETURN으로 바뀐 경우 등)
+            // 단, CHASE -> ATTACK은 허용 (추적 중 공격 사거리 진입)
+            if (request_state != self->state_ && 
+                !(request_state == MonsterState::CHASE && self->state_ == MonsterState::ATTACK)) {
+                return;
+            }
 
             self->current_path_ = result_waypoints;
             self->path_index_ = 0;
@@ -191,7 +218,7 @@ void Monster::CalculatePath() {
             if (self->current_path_.size() > 1) {
                 float dx = self->current_path_[0].x - self->position_.x;
                 float dy = self->current_path_[0].y - self->position_.y;
-                if (std::sqrt(dx * dx + dy * dy) < 0.1f) {
+                if (std::sqrt(dx * dx + dy * dy) < GameConstants::AI::WAYPOINT_EPSILON) {
                     self->path_index_ = 1;
                 }
             }

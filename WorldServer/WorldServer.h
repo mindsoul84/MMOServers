@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <boost/asio.hpp>
 #include <memory>
 #include <vector>
@@ -40,4 +40,5 @@ public:
 private:
     void ReadHeader();
     void ReadPayload(uint16_t payload_size);
+    void OnDisconnected();  // ★ [추가] 세션 정리 함수
 };

@@ -1,10 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "..\PathFinder\PathFinder.h"
 #include <vector>
 #include <cstdint>
 #include <functional> // 콜백 함수 사용을 위함
 #include <memory>     // ★ 비동기 콜백 시 생명주기 보장을 위함
 #include <mutex>
+#include <atomic>     // ★ [추가] 경로 계산 버전 관리용
 
 /* 
 * Monster 수정 (안전망 추가) : Monster 객체가 비동기 작업 중에도 스스로 수명을 연장할 수 있도록
@@ -37,6 +38,11 @@ private:
     Vector3 target_last_pos_;    
     std::vector<Vector3> current_path_;     // 현재 이동 경로 데이터
     int path_index_;
+
+    // ★ [추가] 경로 계산 버전 번호 (Race Condition 방지)
+    // 비동기 길찾기 결과가 도착했을 때, 요청 당시의 버전과 현재 버전을 비교하여
+    // 오래된 결과는 무시합니다.
+    std::atomic<uint64_t> path_request_version_{ 0 };
 
     // [전투용 스탯 추가]    
     int hp_;
@@ -112,6 +118,7 @@ public:
         std::lock_guard<std::mutex> lock(mtx_); // ★ 죽을 때 락
         hp_ = 0;
         state_ = MonsterState::DEAD;
+        path_request_version_++;  // ★ [추가] 대기 중인 경로 요청 무효화
     }
     // =========================================================
 
@@ -132,6 +139,7 @@ public:
         position_ = spawn_position_;
         dead_timer_ = 0.0f;
         target_user_id_ = 0;
+        path_request_version_++;  // ★ [추가] 경로 버전 증가로 이전 요청 무효화
         if (!current_path_.empty()) current_path_.clear();
     }
 

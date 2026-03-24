@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // 몬스터 초기 스폰을 담당하는 함수
 void InitMonsters();

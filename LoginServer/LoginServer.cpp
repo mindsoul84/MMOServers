@@ -1,4 +1,4 @@
-
+﻿
 #include "LoginServer.h"
 #include "Session/Session.h"
 #include "Network/WorldConnection.h"
@@ -16,19 +16,9 @@
 using boost::asio::ip::tcp;
 
 // ==========================================
-// ★ 전역 메모리 할당
+// ★ [리팩토링] 전역 변수 제거됨
+// 모든 상태는 LoginContext 싱글톤에서 관리
 // ==========================================
-boost::asio::io_context g_db_io_context;                              // ★ DB 전용 컨텍스트
-auto g_db_work_guard = boost::asio::make_work_guard(g_db_io_context); // ★ 종료 방지 가드
-
-std::atomic<int> g_connected_clients{ 0 };
-std::unordered_set<std::string> g_loggedInUsers;
-std::unordered_map<std::string, std::shared_ptr<Session>> g_sessionMap;
-std::mutex g_loginMutex;
-
-PacketDispatcher<Session> g_client_dispatcher;
-PacketDispatcher<WorldConnection> g_world_dispatcher;
-std::shared_ptr<WorldConnection> g_worldConnection; // 전역 S2S 커넥션 포인터
 
 // ==========================================
 // Server 대기열 및 Main
@@ -45,7 +35,7 @@ class LoginServer {
         void do_accept() {
             acceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    g_connected_clients++;
+                    LoginContext::Get().connected_clients++;
                     std::make_shared<Session>(std::move(socket))->start();
                 }
                 do_accept();
@@ -75,18 +65,21 @@ int main() {
         return -1;
     }
 
+    // ★ [리팩토링] Context 싱글톤을 통해 접근
+    auto& ctx = LoginContext::Get();
+
     // ★ 분리된 핸들러들을 디스패처에 등록
-    g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
-    g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT, Handle_Heartbeat);
-    g_client_dispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_WORLD_SELECT_REQ, Handle_WorldSelectReq);
-    g_world_dispatcher.RegisterHandler(Protocol::PKT_WORLD_LOGIN_SELECT_RES, Handle_S2SWorldSelectRes);
+    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
+    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT, Handle_Heartbeat);
+    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_WORLD_SELECT_REQ, Handle_WorldSelectReq);
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_LOGIN_SELECT_RES, Handle_S2SWorldSelectRes);
 
     try {
         boost::asio::io_context io_context;
 
-        g_worldConnection = std::make_shared<WorldConnection>(std::ref(io_context));
+        ctx.worldConnection = std::make_shared<WorldConnection>(std::ref(io_context));
         short world_port = ConfigManager::GetInstance().GetLoginWorldConnPort();
-        g_worldConnection->Connect("127.0.0.1", world_port);
+        ctx.worldConnection->Connect("127.0.0.1", world_port);
 
         short login_port = ConfigManager::GetInstance().GetLoginServerPort();
         LoginServer server(io_context, login_port);
@@ -100,7 +93,7 @@ int main() {
 
         std::cout << "[System] 💾 DB 연산 전용 백그라운드 스레드 가동 (" << db_thread_count << "개)...\n";
         for (int i = 0; i < db_thread_count; ++i) {
-            std::thread([i]() {
+            std::thread([i, &ctx]() {
                 // 1. 이 스레드만의 전용 DB 연결 객체 생성
                 if (ConfigManager::GetInstance().UseDB()) {
                     t_dbManager = new DBManager();
@@ -110,7 +103,7 @@ int main() {
                 }
 
                 // 2. 무한 대기하며 큐에 들어오는 로그인 요청(Job) 처리
-                g_db_io_context.run();
+                ctx.db_io_context.run();
 
                 // 3. 스레드가 종료될 때 안전하게 메모리 해제
                 if (t_dbManager) {
