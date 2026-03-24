@@ -198,11 +198,15 @@ int main() {
         std::cout << "[WorldServer] 월드 중앙 서버 가동 시작 (Port: " << port << ") Created by Jeong Shin Young\n";
         std::cout << "=================================================\n";
 
-        // ★ 분리된 gRPC 서버 스레드 구동
+        // ★ [수정 4] gRPC 스레드: detach() 제거 → graceful shutdown 지원
+        // 변경 전: grpc_thread.detach() → 종료 시점 제어 불가
+        // 변경 후: io_context.run() 완료 후 grpc_thread.join()
         std::thread grpc_thread(RunGrpcServer);
-        grpc_thread.detach();
 
         io_context.run();
+
+        // io_context가 멈추면 gRPC 스레드도 함께 정리
+        if (grpc_thread.joinable()) grpc_thread.join();
     }
     catch (std::exception& e) {
         std::cerr << "[Error] 월드 서버 예외 발생: " << e.what() << "\n";

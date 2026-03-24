@@ -15,14 +15,9 @@
 
 using boost::asio::ip::tcp;
 
-// ==========================================
-// ★ [리팩토링] 전역 변수 제거됨
-// 모든 상태는 LoginContext 싱글톤에서 관리
-// ==========================================
+// ★ 정적 멤버 정의 (싱글톤 DI 오버라이드 포인터)
+// s_test_instance_ 는 헤더에서 inline 으로 정의됩니다. (중복 정의 제거)
 
-// ==========================================
-// Server 대기열 및 Main
-// ==========================================
 class LoginServer {
     private:
         tcp::acceptor acceptor_;
@@ -43,36 +38,28 @@ class LoginServer {
         }
 };
 
-int main() {    
-    
+int main() {
     SetConsoleOutputCP(CP_UTF8);
 
-    // =========================================================
-    // ★ [중복 실행 방지] 고유한 이름의 Named Mutex 생성
-    // =========================================================
     HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\LoginServer_Unique_Mutex_Lock");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         std::cerr << "🚨 [Error] LoginServer가 이미 실행 중입니다. 창을 닫습니다.\n";
         CloseHandle(hMutex);
         return 1;
     }
-    // =========================================================
 
-    if (!ConfigManager::GetInstance().LoadConfig("config.json"))
-    {
+    if (!ConfigManager::GetInstance().LoadConfig("config.json")) {
         std::cerr << "🚨 config 설정 파일 오류로 인해 LoginServer 종료합니다.\n";
-        system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
+        system("pause");
         return -1;
     }
 
-    // ★ [리팩토링] Context 싱글톤을 통해 접근
     auto& ctx = LoginContext::Get();
 
-    // ★ 분리된 핸들러들을 디스패처에 등록
-    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ, Handle_LoginReq);
-    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT, Handle_Heartbeat);
+    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ,        Handle_LoginReq);
+    ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT,       Handle_Heartbeat);
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_WORLD_SELECT_REQ, Handle_WorldSelectReq);
-    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_LOGIN_SELECT_RES, Handle_S2SWorldSelectRes);
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_LOGIN_SELECT_RES,         Handle_S2SWorldSelectRes);
 
     try {
         boost::asio::io_context io_context;
@@ -86,15 +73,18 @@ int main() {
         std::cout << "[LoginServer] 로그인 서버 가동 시작 (Port: " << login_port << ") Created by Jeong Shin Young\n";
         std::cout << "=================================================\n";
 
-        // =========================================================
-        // ★ DB 전담 워커 스레드 구동 (Thread-Local DB 연결)
-        // =========================================================
+        // ==========================================
+        // ★ [수정 4] DB 전담 스레드: detach() → db_threads_ 벡터에 보관
+        //
+        // 변경 전: std::thread(...).detach() → Shutdown 불가, 리소스 누수 위험
+        // 변경 후: ctx.db_threads_.emplace_back(...) → Shutdown()에서 join() 가능
+        // ==========================================
         int db_thread_count = ConfigManager::GetInstance().GetLoginDbThreadCount();
-
         std::cout << "[System] 💾 DB 연산 전용 백그라운드 스레드 가동 (" << db_thread_count << "개)...\n";
+
         for (int i = 0; i < db_thread_count; ++i) {
-            std::thread([i, &ctx]() {
-                // 1. 이 스레드만의 전용 DB 연결 객체 생성
+            // ★ [수정 4] detach() 제거 → db_threads_ 벡터에 push
+            ctx.db_threads_.emplace_back([i, &ctx]() {
                 if (ConfigManager::GetInstance().UseDB()) {
                     t_dbManager = new DBManager();
                     if (!t_dbManager->Connect()) {
@@ -102,20 +92,21 @@ int main() {
                     }
                 }
 
-                // 2. 무한 대기하며 큐에 들어오는 로그인 요청(Job) 처리
+                // db_io_context.stop() 호출 시 run()이 반환되어 스레드 종료
                 ctx.db_io_context.run();
 
-                // 3. 스레드가 종료될 때 안전하게 메모리 해제
                 if (t_dbManager) {
                     delete t_dbManager;
                     t_dbManager = nullptr;
                 }
-                }).detach();
+                std::cout << "[DB Thread " << i << "] 정상 종료됨.\n";
+            });
         }
         std::cout << "=================================================\n";
 
         unsigned int max_thread_count = ConfigManager::GetInstance().GetLoginMaxThreadCount();
         if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
+
         std::vector<std::thread> threads;
         for (unsigned int i = 0; i < max_thread_count; ++i) {
             threads.emplace_back([&io_context]() { io_context.run(); });
@@ -125,5 +116,9 @@ int main() {
     catch (std::exception& e) {
         std::cerr << "[Error] 서버 예외 발생: " << e.what() << "\n";
     }
+
+    // ★ [수정 4] Graceful Shutdown: DB 스레드 모두 join
+    ctx.Shutdown();
+
     return 0;
 }

@@ -7,6 +7,12 @@
 #include <functional>
 #include <chrono>
 
+// Windows: ec.message()는 CP_ACP(CP949)로 반환되므로
+// UTF-8 콘솔 환경에서 깨지지 않도록 UTF-8로 변환하는 헬퍼 추가
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 // ==========================================
 // ★ 네트워크 에러 핸들링 유틸리티
 // 재시도 로직, 에러 분류, 로깅 기능 제공
@@ -15,12 +21,58 @@
 namespace NetworkUtils {
 
     // ---------------------------------------------------------
+    // [내부] ec.message() CP_ACP → UTF-8 변환 헬퍼
+    // Windows에서 boost::system::error_code::message()는
+    // 시스템 코드페이지(CP949) 문자열을 반환합니다.
+    // /utf-8 + SetConsoleOutputCP(CP_UTF8) 환경에서는
+    // CP949 바이트를 UTF-8로 변환해야 한글이 정상 출력됩니다.
+    // ---------------------------------------------------------
+#ifdef _WIN32
+    inline std::string ErrorMessageToUtf8(const std::string& ansi_str) {
+        if (ansi_str.empty()) return ansi_str;
+
+        // 1단계: CP_ACP(CP949) → UTF-16
+        int wlen = MultiByteToWideChar(
+            CP_ACP, 0,
+            ansi_str.c_str(), static_cast<int>(ansi_str.size()),
+            nullptr, 0);
+        if (wlen <= 0) return ansi_str;
+
+        std::wstring wstr(wlen, L'\0');
+        MultiByteToWideChar(
+            CP_ACP, 0,
+            ansi_str.c_str(), static_cast<int>(ansi_str.size()),
+            &wstr[0], wlen);
+
+        // 2단계: UTF-16 → UTF-8
+        int ulen = WideCharToMultiByte(
+            CP_UTF8, 0,
+            wstr.c_str(), wlen,
+            nullptr, 0, nullptr, nullptr);
+        if (ulen <= 0) return ansi_str;
+
+        std::string utf8_str(ulen, '\0');
+        WideCharToMultiByte(
+            CP_UTF8, 0,
+            wstr.c_str(), wlen,
+            &utf8_str[0], ulen, nullptr, nullptr);
+
+        return utf8_str;
+    }
+#else
+    // Linux/macOS는 이미 UTF-8이므로 변환 불필요
+    inline std::string ErrorMessageToUtf8(const std::string& str) {
+        return str;
+    }
+#endif
+
+    // ---------------------------------------------------------
     // 에러 심각도 분류
     // ---------------------------------------------------------
     enum class ErrorSeverity {
         RECOVERABLE,    // 재시도 가능 (일시적 네트워크 문제)
         FATAL,          // 세션 종료 필요 (연결 끊김)
-        IGNORED_ERROR          // 무시 가능 (operation_aborted 등)
+        IGNORED_ERROR   // 무시 가능 (operation_aborted 등)
     };
 
     // ---------------------------------------------------------
@@ -64,13 +116,14 @@ namespace NetworkUtils {
                          ErrorSeverity severity) {
         const char* severity_str = "";
         switch (severity) {
-            case ErrorSeverity::RECOVERABLE: severity_str = "⚠️ RECOVERABLE"; break;
-            case ErrorSeverity::FATAL:       severity_str = "🚨 FATAL"; break;
-            case ErrorSeverity::IGNORED_ERROR:      severity_str = "ℹ️ IGNORED"; break;
+            case ErrorSeverity::RECOVERABLE:  severity_str = "⚠️ RECOVERABLE"; break;
+            case ErrorSeverity::FATAL:        severity_str = "🚨 FATAL";       break;
+            case ErrorSeverity::IGNORED_ERROR: severity_str = "ℹ️ IGNORED";   break;
         }
 
+        // ec.message()는 Windows에서 CP949로 반환되므로 UTF-8로 변환 후 출력
         std::cerr << "[Network] " << severity_str << " [" << context << "] "
-                  << "Error: " << ec.message() 
+                  << "Error: " << ErrorMessageToUtf8(ec.message())
                   << " (Code: " << ec.value() << ")\n";
     }
 

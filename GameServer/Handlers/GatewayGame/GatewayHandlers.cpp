@@ -15,7 +15,7 @@
 void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
 
     auto req = std::make_shared<Protocol::GatewayGameMoveReq>();
-    if (!req->ParseFromArray(payload, payloadSize)) return;
+    if (!req->ParseFromArray(payload, payloadSize)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << payloadSize << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
 
@@ -115,7 +115,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 #else //DEF_STRESS_TEST_SERVER
 void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::GatewayGameMoveReq>();
-    if (!req->ParseFromArray(payload, payloadSize)) return;
+    if (!req->ParseFromArray(payload, payloadSize)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << payloadSize << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
 
@@ -203,7 +203,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 // [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러
 void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::GatewayGameLeaveReq>();
-    if (!req->ParseFromArray(payload, payloadSize)) return;
+    if (!req->ParseFromArray(payload, payloadSize)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << payloadSize << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
     std::string acc_id = req->account_id();
@@ -247,7 +247,7 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
 // [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러 (맵 삭제가 일어나므로 쓰기 락 유지)
 void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::GatewayGameLeaveReq>();
-    if (!req->ParseFromArray(payload, payloadSize)) return;
+    if (!req->ParseFromArray(payload, payloadSize)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << payloadSize << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
 
@@ -275,7 +275,7 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
 void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t size) {
 
     auto req = std::make_shared<Protocol::GatewayGameAttackReq>();
-    if (!req->ParseFromArray(payload, size)) return;
+    if (!req->ParseFromArray(payload, size)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << size << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
     std::string account_id = req->account_id();
@@ -386,7 +386,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 // [게이트웨이 -> 게임서버] 유저의 공격 요청 처리
 void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t size) {
     auto req = std::make_shared<Protocol::GatewayGameAttackReq>();
-    if (!req->ParseFromArray(payload, size)) return;
+    if (!req->ParseFromArray(payload, size)) { std::cerr << "[GameServer] 🚨 ParseFromArray 실패: " << __func__ << " (payloadSize=" << size << ")\n"; return; }
 
     auto& ctx = GameContext::Get();
 

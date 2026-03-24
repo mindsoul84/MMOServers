@@ -6,7 +6,9 @@
 #include <string>
 #include <unordered_map>
 #include <mutex>
-#include <shared_mutex> // Read-Write Lock을 위한 헤더
+#include <shared_mutex>
+#include <thread>
+#include <atomic>
 
 #pragma warning(push)
 #pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
@@ -19,7 +21,7 @@
 #include "Pathfinder/Pathfinder.h"
 
 #include "../Common/DataManager/DataManager.h"
-#include "../Common/Define/GameConstants.h"  // ★ [추가] 게임 상수 정의
+#include "../Common/Define/GameConstants.h"
 
 #pragma pack(push, 1)
 struct PacketHeader {
@@ -31,85 +33,113 @@ struct PacketHeader {
 class GatewaySession;
 class WorldConnection;
 
-// ==========================================
-// ★ 유저 정보 구조체
-// ==========================================
 struct PlayerInfo {
     uint64_t uid;
     float x, y;
-    int hp = GameConstants::Player::DEFAULT_HP;
+    int hp  = GameConstants::Player::DEFAULT_HP;
     int atk = GameConstants::Player::DEFAULT_ATK;
     int def = GameConstants::Player::DEFAULT_DEF;
 
-    // ☆ 유저 개별 락 (Fine-grained Lock) ★
-    std::mutex mtx; 
+    std::mutex mtx;
 
     PlayerInfo() = default;
-
-    // mutex는 복사/이동이 불가능하므로 삭제 처리
     PlayerInfo(const PlayerInfo&) = delete;
     PlayerInfo& operator=(const PlayerInfo&) = delete;
 };
 
 // ==========================================
-// ★ [리팩토링] GameServer의 모든 상태를 관리하는 단일 Context
+// ★ [수정 1] GameContext 싱글톤 → 의존성 주입(DI) 지원
+//
+// 변경 전: private 생성자 + static Get() → 테스트 불가
+// 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 주입 가능
+//
+// ★ [수정 4] thread::detach 남용 → managed_threads_ 로 안전한 종료 지원
+//   - AddManagedThread()로 등록된 스레드는 Shutdown()에서 모두 join()됨
+//   - graceful shutdown: Shutdown() 호출 → ai_io_context/io_context 정지 → join
 // ==========================================
 struct GameContext {
-    // =========================================================
-    // ★ 기존 매니저 Context 내부로 편입
-    // =========================================================
     DataManager dataManager;
 
-    // 1. 코어 네트워크 및 메인 게임 스레드 큐
     boost::asio::io_context io_context;
 
-    // ★ [핵심] Lock 모델 도입: 플레이어 맵과 몬스터 맵 등을 보호할 중앙 상태 락(Read-Write Lock)
     mutable std::shared_mutex gameStateMutex;
 
-    // 2. AI 전용 비동기 길찾기 큐
     boost::asio::io_context ai_io_context;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> ai_work_guard;
 
-    // 3. 디스패처 (게이트웨이 방향 / 월드 방향)
     PacketDispatcher<GatewaySession> gatewayDispatcher;
     PacketDispatcher<WorldConnection> worldDispatcher;
 
-    // 4. S2S 커넥션 관리
     std::shared_ptr<WorldConnection> worldConnection;
     std::unordered_set<std::shared_ptr<GatewaySession>> gatewaySessions;
     std::mutex gatewaySessionMutex;
 
-    // 5. 인게임 월드 상태 데이터
     std::unique_ptr<Zone> zone;
     NavMesh navMesh;
     std::vector<std::shared_ptr<Monster>> monsters;
 
-    std::unordered_map<std::string, std::shared_ptr<PlayerInfo>> playerMap;  // account_id -> PlayerInfo
+    std::unordered_map<std::string, std::shared_ptr<PlayerInfo>> playerMap;
     std::unordered_map<uint64_t, std::shared_ptr<Monster>> monsterMap;
-
-    std::unordered_map<uint64_t, std::string> uidToAccount; // uid -> account_id
+    std::unordered_map<uint64_t, std::string> uidToAccount;
     uint64_t uidCounter = 1;
 
 #ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
-    std::atomic<uint64_t> processed_packet_count{ 0 };  // 워치독 데드락 감지용 패킷 처리 카운터
+    std::atomic<uint64_t> processed_packet_count{ 0 };
+    std::atomic<int> connected_bot_count{ 0 };
+#endif
 
-    std::atomic<int> connected_bot_count{ 0 };          // 현재 접속 중인 Stress 봇의 수를 추적하는 변수
-#endif//DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+    // ★ [추가 - 수정 4] detach 대신 managed_threads_ 에 보관 → Shutdown()에서 join
+    std::vector<std::thread> managed_threads_;
 
-    // 싱글톤
+    // ★ [추가 - 수정 4] 정상 종료 신호 플래그
+    std::atomic<bool> is_running_{ true };
+
+    // ★ [수정 1] 테스트 인스턴스 오버라이드 포인터
+    // ★ [수정] inline 정의 (C++17) → GameServer.cpp 없이도 링크 완결
+    inline static GameContext* s_test_instance_ = nullptr;
+
+    // ★ [수정 1] 테스트 인스턴스가 주입된 경우 반환, 없으면 정적 싱글톤 반환
     static GameContext& Get() {
+        if (s_test_instance_) return *s_test_instance_;
         static GameContext instance;
         return instance;
     }
 
-    // ★ 브로드캐스트 헬퍼 함수
+    // ★ [추가 - 수정 1] 테스트 전용 주입 메서드
+    static void SetTestInstance(GameContext* instance) noexcept {
+        s_test_instance_ = instance;
+    }
+
+    // ★ [추가 - 수정 4] detached 스레드 대신 사용. 스레드를 managed_threads_에 등록
+    void AddManagedThread(std::thread t) {
+        managed_threads_.push_back(std::move(t));
+    }
+
+    // ★ [추가 - 수정 4] Graceful Shutdown:
+    //   1) is_running_ = false 로 루프 종료 신호
+    //   2) ai_io_context 정지 → AI 스레드 종료
+    //   3) 모든 managed_threads_ join
+    void Shutdown() {
+        is_running_.store(false);
+        ai_work_guard.reset();          // work_guard 해제 → run() 이 반환될 수 있게
+        ai_io_context.stop();           // AI 전용 스레드 풀 종료
+        for (auto& t : managed_threads_) {
+            if (t.joinable()) t.join();
+        }
+        managed_threads_.clear();
+        std::cout << "[GameContext] Shutdown 완료: 모든 관리 스레드 종료됨.\n";
+    }
+
     void BroadcastToGateways(uint16_t pktId, const google::protobuf::Message& msg);
 
-private:
+    // ★ [수정 1] public 생성자 → 테스트 코드에서 GameContext ctx; 로 직접 생성 가능
     GameContext()
         : ai_work_guard(boost::asio::make_work_guard(ai_io_context)) {
     }
+
+    // 복사/이동 금지
+    GameContext(const GameContext&) = delete;
+    GameContext& operator=(const GameContext&) = delete;
 };
 
-// ★ 길찾기용 Thread-Local 객체는 스레드별로 할당되어야 하므로 extern 유지
 extern thread_local dtNavMeshQuery* t_navQuery;
