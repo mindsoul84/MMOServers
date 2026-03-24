@@ -24,3 +24,7 @@ GatewayServer/x64/Debug/GatewayServer.ilk
 *.dll
 Common/Protocol/protocol.pb.cc
 Common/Protocol/protocol.pb.h
+Common/Protocol/protocol_grpc.grpc.pb.cc
+Common/Protocol/protocol_grpc.grpc.pb.h
+Common/Protocol/protocol_grpc.pb.cc
+Common/Protocol/protocol_grpc.pb.h
