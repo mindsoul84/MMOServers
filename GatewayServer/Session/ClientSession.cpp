@@ -1,16 +1,38 @@
 ﻿#include "ClientSession.h"
 #include "../Network/GameConnection.h"
+#include "../../Common/Define/GameConstants.h"
 #include "..\Common\MemoryPool.h"
 #include "..\Common\Utils\NetworkErrorHandler.h"
 #include <iostream>
 
-ClientSession::ClientSession(boost::asio::ip::tcp::socket socket) noexcept : socket_(std::move(socket)) {}
+// ==========================================
+// [BUG FIX] strand_ 초기화 추가
+//
+// 변경 전: socket_(std::move(socket)) 만 초기화
+// 변경 후: strand_(socket_.get_executor()) 추가 -> Send() 직렬화 보장
+// ==========================================
+ClientSession::ClientSession(boost::asio::ip::tcp::socket socket) noexcept
+    : socket_(std::move(socket))
+    , strand_(static_cast<boost::asio::io_context&>(socket_.get_executor().context()))
+{}
 
 void ClientSession::start() { ReadHeader(); }
 
 void ClientSession::SetAccountId(const std::string& id) { account_id_ = id; }
 const std::string& ClientSession::GetAccountId() const { return account_id_; }
 
+// ==========================================
+// [BUG FIX] Send() 전면 재작성 - strand + send_queue 패턴 적용
+//
+// 변경 전:
+//   boost::asio::async_write(socket_, ...) 를 strand 없이 직접 호출
+//   -> 여러 스레드에서 동시에 같은 ClientSession에 Send 호출 시
+//      TCP 스트림이 interleave되어 패킷이 깨짐
+//
+// 변경 후:
+//   boost::asio::post(strand_, ...) 로 큐에 쌓은 뒤 DoWrite()로 순차 전송
+//   -> GatewaySession과 동일한 패턴으로 스레드 안전성 확보
+// ==========================================
 void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) {
         std::cerr << "[Gateway] ⚠️ Send 시도했으나 소켓이 이미 닫혀있음 (PktID: " << pktId << ")\n";
@@ -22,35 +44,35 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
     uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
-    // =========================================================
-    // 버퍼 크기 초과 시 서버 죽지 않도록 에러 로그만 띄우고 취소
-    // =========================================================
     if (totalSize > MAX_PACKET_SIZE) {
         std::cerr << "🚨 [Error] 패킷 크기 초과! (PktID: " << pktId
             << ", Size: " << totalSize << " bytes) - 전송 취소\n";
         return;
     }
 
-    // 메모리 풀의 64KB 고정 버퍼를 쓰지 않고, 딱 필요한 만큼(totalSize)만 할당
-    auto send_buf = std::make_shared<std::vector<char>>(totalSize);
+    // [BUG FIX] 가변 크기 SendBuffer 사용 (부하테스트 모드)
+    auto send_buf = std::make_shared<SendBuffer>(totalSize);
 
     PacketHeader header{ totalSize, pktId };
-    memcpy(send_buf->data(), &header, sizeof(PacketHeader));
-    msg.SerializeToArray(send_buf->data() + sizeof(PacketHeader), payloadSize);
+    memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
+    msg.SerializeToArray(send_buf->buffer_.data() + sizeof(PacketHeader), payloadSize);
 
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(send_buf->data(), totalSize),
-        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
-            if (ec) {
-                auto result = NetworkUtils::HandleError(
-                    "ClientSession::Send(PktID:" + std::to_string(pktId) + ")", 
-                    ec
-                );
-                if (result.should_disconnect) {
-                    OnDisconnected();
-                }
-            }
-        });
+
+    // [BUG FIX] strand_ 내부에서 큐에 쌓고 DoWrite()로 순차 전송
+    boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
+        if (send_queue_.size() > GameConstants::Network::SEND_QUEUE_MAX_SIZE) {
+            std::cerr << "[Warning] ClientSession Send Queue 폭발! 전송 드랍.\n";
+            return;
+        }
+
+        bool write_in_progress = !send_queue_.empty();
+        send_queue_.emplace_back(send_buf, static_cast<size_t>(totalSize));
+
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
 
 #else //DEF_STRESS_TEST_TOOL
 
@@ -67,20 +89,51 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
 
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
-            if (ec) {
-                auto result = NetworkUtils::HandleError(
-                    "ClientSession::Send(PktID:" + std::to_string(pktId) + ")", 
-                    ec
-                );
+    size_t write_size = header.size;
+
+    // [BUG FIX] strand_ 내부에서 큐에 쌓고 DoWrite()로 순차 전송
+    boost::asio::post(strand_, [this, self, send_buf, write_size]() {
+        bool write_in_progress = !send_queue_.empty();
+        send_queue_.push_back({ send_buf, write_size });
+
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
+
+#endif//DEF_STRESS_TEST_TOOL    
+}
+
+// ==========================================
+// [BUG FIX] 실제 비동기 전송을 수행하는 함수 (신규 추가)
+//
+// strand_ 내부에서만 호출되며, 큐의 맨 앞 패킷부터 순차적으로 전송합니다.
+// 전송 완료 콜백도 bind_executor(strand_)로 보호하여 스레드 안전성을 확보합니다.
+// ==========================================
+void ClientSession::DoWrite() {
+    auto self(shared_from_this());
+    auto& front_msg = send_queue_.front();
+
+    boost::asio::async_write(socket_,
+        boost::asio::buffer(front_msg.first->buffer_.data(), front_msg.second),
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec) {
+                send_queue_.pop_front();
+
+                // 큐에 대기 중인 다음 패킷이 있다면 이어서 전송 (꼬리물기)
+                if (!send_queue_.empty()) {
+                    DoWrite();
+                }
+            }
+            else {
+                auto result = NetworkUtils::HandleError("ClientSession::DoWrite", ec);
+                std::cerr << "[Gateway] Client로 패킷 전송 실패 (DoWrite)\n";
+                send_queue_.clear();
                 if (result.should_disconnect) {
                     OnDisconnected();
                 }
             }
-        });
-
-#endif//DEF_STRESS_TEST_TOOL    
+        }));
 }
 
 void ClientSession::OnDisconnected() {
@@ -139,7 +192,6 @@ void ClientSession::ReadPayload(uint16_t payload_size) {
         [this, self, payload_size](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 auto session_ptr = self;
-                // ★ [수정] g_gateway_dispatcher → GatewayContext::Get().clientDispatcher
                 GatewayContext::Get().clientDispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }

@@ -75,17 +75,26 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
         }
     }
 
-    float old_x = 0.0f;
-    float old_y = 0.0f;
+    // ==========================================
+    // [BUG FIX] Zone::UpdatePosition을 player lock 안으로 이동
+    //
+    // 변경 전: 좌표 갱신(lock 안) → UpdatePosition(lock 밖)
+    //   -> 그 사이에 다른 스레드가 GetPlayersInAOI 호출 시
+    //      갱신 전 좌표로 AOI 목록 조회 → 이동 직후 브로드캐스트 누락 가능
+    //
+    // 변경 후: 좌표 갱신 + UpdatePosition 모두 lock 안에서 수행
+    //   -> 비 스트레스 모드와 동일한 원자성 보장
+    // ==========================================
     {
         std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
-        old_x = player_ptr->x;
-        old_y = player_ptr->y;
+        float old_x = player_ptr->x;
+        float old_y = player_ptr->y;
 
         player_ptr->x = new_x;
         player_ptr->y = new_y;
+
+        ctx.zone->UpdatePosition(player_ptr->uid, old_x, old_y, new_x, new_y);
     }
-    ctx.zone->UpdatePosition(player_ptr->uid, old_x, old_y, new_x, new_y);
 
     auto aoi_uids = ctx.zone->GetPlayersInAOI(new_x, new_y);
     Protocol::GameGatewayMoveRes s2s_res;

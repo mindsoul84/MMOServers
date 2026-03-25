@@ -40,8 +40,8 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
 
     // ★ [수정] 람다 캡처에 totalSize를 추가합니다.
     boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
-        // [Backpressure] 큐가 100000개 이상 쌓이면 서버가 뻗지 않도록 패킷 드랍
-        if (send_queue_.size() > 100000) {
+        // [Backpressure] 큐가 SEND_QUEUE_MAX_SIZE 이상 쌓이면 서버가 뻗지 않도록 패킷 드랍
+        if (send_queue_.size() > GameConstants::Network::SEND_QUEUE_MAX_SIZE) {
             std::cerr << "🚨 [Warning] GatewaySession Send Queue 폭발! 전송 드랍.\n";
             return;
         }

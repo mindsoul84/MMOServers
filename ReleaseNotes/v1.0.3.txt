@@ -1,0 +1,36 @@
+🔍 치명적 버그 및 잠재적 크래시 포인트
+
+[BUG-1] ClientSession::Send()에 strand 미적용 — 동시 쓰기 경합
+GatewaySession의 Send()는 strand + send_queue로 직렬화를 정확히 구현했는데, ClientSession(Gateway→Client)의 Send()에는 strand가 없습니다.
+여러 스레드에서 동시에 같은 ClientSession에 async_write를 호출하면 TCP 스트림이 interleave되어 패킷이 깨집니다.
+이것은 실무에서 "간헐적으로 클라이언트가 이상한 패킷을 받는다"는 라이브 이슈로 발현되는 전형적인 버그입니다.
+
+// ClientSession.cpp Line 42 (부하테스트 모드)
+boost::asio::async_write(socket_, ...);  // ❌ strand 없이 직접 async_write
+
+// 반면 GatewaySession.cpp는 정확히 처리:
+boost::asio::post(strand_, [...]() {     // ✅ strand 직렬화 후 write
+    send_queue_.push_back(...);
+    if (!write_in_progress) DoWrite();
+});
+→ 이 불일치가 AI가 코드를 생성하면서 일관성을 유지하지 못한 대표적 증거입니다. 한 세션은 정확하게 구현했는데 다른 세션에는 같은 패턴이 적용되지 않았습니다.
+
+[BUG-2] Zone::UpdatePosition과 playerInfo 갱신 사이 원자성 미보장
+cpp// GatewayHandlers.cpp (비 스트레스테스트 모드)
+{
+    std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+    ctx.zone->UpdatePosition(player_ptr->uid, player_ptr->x, player_ptr->y, new_x, new_y);
+    player_ptr->x = new_x;  // Zone 갱신과 좌표 갱신이 같은 락 안
+}
+이것은 괜찮아 보이지만, 스트레스테스트 모드에서는 다르게 작성되어 있습니다:
+cpp// GatewayHandlers.cpp (스트레스테스트 모드)
+{
+    std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
+    old_x = player_ptr->x;
+    old_y = player_ptr->y;
+    player_ptr->x = new_x;
+    player_ptr->y = new_y;
+}
+ctx.zone->UpdatePosition(player_ptr->uid, old_x, old_y, new_x, new_y);  // 락 밖에서 호출!
+좌표 갱신과 Zone 갱신이 다른 락 범위에 있어서, 그 사이에 다른 스레드가 GetPlayersInAOI를 호출하면 갱신 전의 좌표로 AOI 목록을 조회하게 됩니다. 
+심각한 버그는 아니지만, 이동 직후 AOI 브로드캐스트에서 누락이 생길 수 있습니다.
