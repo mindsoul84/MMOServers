@@ -4,8 +4,10 @@
 using boost::asio::ip::tcp;
 
 WorldConnection::WorldConnection(boost::asio::io_context& io_context)
-    : socket_(io_context), io_context_(io_context) {
-}
+    : socket_(io_context)
+    , io_context_(io_context)
+    , strand_(io_context)   // ★ [버그 픽스] strand_ 초기화
+{}
 
 void WorldConnection::Connect(const std::string& ip, short port) {
     tcp::resolver resolver(io_context_);
@@ -22,6 +24,12 @@ void WorldConnection::Connect(const std::string& ip, short port) {
     ReadHeader();
 }
 
+// ==========================================
+// ★ [버그 픽스] Send() - strand + send_queue 패턴 적용
+//
+// 변경 전: async_write 직접 호출 → 동시 Send() 시 소켓 오염 가능
+// 변경 후: strand_에 post → DoWrite()로 순차 전송
+// ==========================================
 void WorldConnection::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     std::string payload;
     msg.SerializeToString(&payload);
@@ -33,11 +41,32 @@ void WorldConnection::Send(uint16_t pktId, const google::protobuf::Message& msg)
     memcpy(send_buf->data(), &header, sizeof(PacketHeader));
     memcpy(send_buf->data() + sizeof(PacketHeader), payload.data(), payload.size());
 
+    size_t write_size = header.size;
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(*send_buf),
-        [this, self, send_buf](boost::system::error_code ec, std::size_t) {
-            if (ec) std::cerr << "[LoginServer] WorldServer로 패킷 전송 실패\n";
-        });
+
+    boost::asio::post(strand_, [this, self, send_buf, write_size]() {
+        bool write_in_progress = !send_queue_.empty();
+        send_queue_.emplace_back(send_buf, write_size);
+        if (!write_in_progress) DoWrite();
+    });
+}
+
+void WorldConnection::DoWrite() {
+    auto self(shared_from_this());
+    auto& front = send_queue_.front();
+
+    boost::asio::async_write(socket_,
+        boost::asio::buffer(front.first->data(), front.second),
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec) {
+                send_queue_.pop_front();
+                if (!send_queue_.empty()) DoWrite();
+            }
+            else {
+                std::cerr << "[LoginServer] WorldServer로 패킷 전송 실패 (DoWrite): " << ec.message() << "\n";
+                send_queue_.clear();
+            }
+        }));
 }
 
 void WorldConnection::ReadHeader() {
@@ -56,7 +85,9 @@ void WorldConnection::ReadHeader() {
                     ReadPayload(payload_size);
                 }
             }
-            else std::cerr << "[LoginServer] 🚨 WorldServer와의 연결이 끊어졌습니다!\n";
+            else {
+                std::cerr << "[LoginServer] 🚨 WorldServer와의 연결이 끊어졌습니다!\n";
+            }
         });
 }
 
@@ -68,6 +99,9 @@ void WorldConnection::ReadPayload(uint16_t payload_size) {
                 auto session_ptr = self;
                 g_world_dispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
+            }
+            else {
+                std::cerr << "[LoginServer] 🚨 WorldServer와의 연결이 끊어졌습니다!\n";
             }
         });
 }
