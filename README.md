@@ -8,5 +8,7 @@
 (여러개의 클라이언트로 이동 시 게임서버 로그를 통해 확인 가능합니다.)
 5. 게임서버 부하테스트 실행 가능 (서버 바이너리 우선 실행 후 StressTestTool.exe 실행)
 
-※ 도용 방지를 위해 sln, csproj, 각종 환경설정들은 제외 하였습니다.
-※ config.json 파일에서 db_conn 으로 MSSQL DB연결 및 테스트 가능합니다. (SSMS 별도 설치 필요)
+※ 도용 방지를 위해 sln, csproj, 각종 환경설정들은 제외 하였습니다. 
+※ config.json 파일에서 db_conn 으로 MSSQL DB연결 및 테스트 가능합니다. (SSMS 설치 필요)
+※ config.json 파일에서 redis_conn 으로 Redis 연결 및 테스트 가능합니다. (redis-server 설치 필요)
+
