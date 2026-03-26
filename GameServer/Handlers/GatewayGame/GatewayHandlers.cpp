@@ -5,6 +5,7 @@
 #include "../../../Common/Define/Define_Server.h"
 #include "../../../Common/Define/GameConstants.h"
 #include "../../../Common/Utils/Logger.h"
+#include "../../../Common/Redis/RedisManager.h"
 
 #include <iostream>
 #include <boost/asio/post.hpp>
@@ -12,15 +13,15 @@
 #include <shared_mutex>
 
 // ==========================================
-// ★ [v1.0.4 리팩토링]
+// ★ [리팩토링]
 //
 // 기존 문제: 스트레스 모드와 일반 모드가 전체 함수 복사로 분기
-//   → 한쪽 수정 시 다른 쪽 반영 누락 (v1.0.3 버그 원인)
-//   → Zone::UpdatePosition과 좌표 갱신의 원자성 불일치
+//   -> 한쪽 수정 시 다른 쪽 반영 누락
+//   -> Zone::UpdatePosition과 좌표 갱신의 원자성 불일치
 //
 // 수정: 하나의 통합 구현으로 병합
-//   → DEF_STRESS_TEST_DEADLOCK_WATCHDOG 카운터만 조건부 적용
-//   → Zone::UpdatePosition을 player lock 안에서 호출 (원자성 보장)
+//   -> DEF_STRESS_TEST_DEADLOCK_WATCHDOG 카운터만 조건부 적용
+//   -> Zone::UpdatePosition을 player lock 안에서 호출 (원자성 보장)
 // ==========================================
 
 // [게이트웨이 -> 게임서버] 유저 이동 처리 (통합 버전)
@@ -85,6 +86,9 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 #endif
             ctx.zone->EnterZone(new_uid, new_x, new_y);
             LOG_INFO("GameServer", "유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")");
+
+            // ★ [추가] Redis에 유저 정보 저장 (접속 시 account_id + 기본 HP)
+            RedisManager::GetInstance().SetPlayerOnline(acc_id, GameConstants::Player::DEFAULT_HP);
         }
     }
 
@@ -161,6 +165,9 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
 #endif
         ctx.zone->LeaveZone(uid, last_x, last_y);
         LOG_INFO("GameServer", "유저(" << acc_id << ", UID:" << uid << ") 퇴장 완료. Zone에서 삭제됨.");
+
+        // ★ [추가] Redis에서 유저 정보 삭제
+        RedisManager::GetInstance().RemovePlayer(acc_id);
     }
 }
 

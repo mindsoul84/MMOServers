@@ -4,6 +4,11 @@
 		"ServerName": ".\\SQLEXPRESS",
 		"Database": "game_db"
 	},
+	"redis_info": {
+		"redis_conn": true,
+		"redis_host": "127.0.0.1",
+		"redis_port": 6379
+	},
 	"dummy_client_info": {
 		"login_server_port": 7777
 	},

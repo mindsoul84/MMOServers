@@ -9,7 +9,8 @@
 #include "protocol.pb.h"
 #pragma warning(pop)
 
-#include "../GameServer.h" // ★ [핵심] GameContext 접근용
+#include "../GameServer.h"
+#include "../../Common/Redis/RedisManager.h"
 
 #include <iostream>
 #include <thread>
@@ -67,7 +68,6 @@ void InitMonsters() {
             {
                 std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
 
-                // 유저의 HP 차감 연산
                 player_ptr->hp -= damage;
                 if (player_ptr->hp < 0) player_ptr->hp = 0;
                 remain_hp = player_ptr->hp;
@@ -75,9 +75,11 @@ void InitMonsters() {
                 p_y = player_ptr->y;
             }
 
+            // ★ [추가] Redis HP 실시간 갱신 (몬스터에게 피격)
+            RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, remain_hp);
+
             // =====================================================================
-            // ★ [버그 픽스] 죽었든 살았든, 무조건 '타격 결과(ATTACK_RES)'부터 먼저 쏩니다!
-            // 이렇게 해야 클라이언트가 자신의 my_hp를 0으로 갱신할 수 있습니다.
+            // ★ 죽었든 살았든, 무조건 '타격 결과(ATTACK_RES)'부터 먼저 전송
             // =====================================================================
             Protocol::GameGatewayAttackRes s2s_res;
             s2s_res.set_attacker_uid(attacker_uid);
@@ -96,27 +98,28 @@ void InitMonsters() {
 
             ctx_inner.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, s2s_res);
 
-            std::cout << "[Combat] 💥 몬스터(" << attacker_uid << ")가 유저(" << acc_id_str
+            std::cout << "[Combat] 몬스터(" << attacker_uid << ")가 유저(" << acc_id_str
                 << ")를 공격! 데미지: " << damage << ", 남은 체력: " << remain_hp << "\n";
 
             // =====================================================================
-            // ★ 2. 만약 이번 타격으로 유저가 기절했다면, 그 직후에 텔레포트(MOVE_RES)를 쏩니다.
+            // ★ 유저 기절 시 마을로 텔레포트 처리
             // =====================================================================
             if (remain_hp <= 0) {
-                std::cout << "\n[System] 💀 당신(" << acc_id_str << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
+                std::cout << "\n[System] 당신(" << acc_id_str << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
 
                 float old_x = p_x;
                 float old_y = p_y;
 
                 {
                     std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
-                    // HP 회복 및 좌표 초기화 (마을)
                     player_ptr->hp = 100;
                     player_ptr->x = 0.0f;
                     player_ptr->y = 0.0f;
                 }
 
-                // 물리 엔진(Zone)에서도 유저를 마을로 순간이동
+                // ★ [추가] Redis HP 갱신 (부활: HP 100으로 복구)
+                RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, 100);
+
                 ctx_inner.zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
 
                 Protocol::GameGatewayMoveRes teleport_res;
@@ -132,9 +135,7 @@ void InitMonsters() {
             }
         });
 
-        // ==========================================================
-        // ★ [추가] JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여!
-        // ==========================================================
+        // ★ JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여
         mon->SetMaxHp(spawn_data.hp);
         mon->SetRespawnSec(spawn_data.respawn_sec);
 
@@ -142,8 +143,8 @@ void InitMonsters() {
         mon->SetSpawnPosition(spawn_data.x, spawn_data.y, 0.0f);
 
         ctx.monsters.push_back(mon);
-        ctx.monsterMap[mon_id] = mon;   // O(1) 검색용 맵에 등록        
-        ctx.zone->EnterZoneMonster(mon_id, mon->GetPosition().x, mon->GetPosition().y); // ★ [수정] 몬스터 전용 Zone 함수 사용
+        ctx.monsterMap[mon_id] = mon;
+        ctx.zone->EnterZoneMonster(mon_id, mon->GetPosition().x, mon->GetPosition().y);
 
         std::cout << "  -> [스폰] 몬스터(ID:" << mon_id << ", HP:" << spawn_data.hp << ", 리스폰:" << spawn_data.respawn_sec << "초) 생성됨." <<
                      " 좌표 (X:" << mon->GetPosition().x << ", Y:" << mon->GetPosition().y << ")\n";
@@ -157,30 +158,24 @@ void ScheduleNextAITick() {
     g_ai_timer->async_wait([](const boost::system::error_code& ec) {
         if (ec) return;
 
-        auto& ctx = GameContext::Get(); // ★ 타이머 콜백 내부용 컨텍스트 소환
+        auto& ctx = GameContext::Get();
 
         auto current_time = std::chrono::steady_clock::now();
         float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
         g_last_ai_time = current_time;
 
-        // ======================================================================================================
-        // ★ 읽기 락(shared_lock)으로 수정 : 몬스터 내부의 개별 락과 Zone 내부의 락이 모든 동시성 통제
-        // ======================================================================================================
         std::shared_lock<std::shared_mutex> lock(ctx.gameStateMutex);
 
         for (auto& mon : ctx.monsters) {
 
-            // ==========================================================
-            // ★ [추가] 몬스터가 죽어있다면 타이머를 돌리고 부활
-            // ==========================================================
+            // ★ 몬스터가 죽어있다면 타이머를 돌리고 부활
             if (mon->GetState() == MonsterState::DEAD) {
-                mon->AddDeadTime(delta_time); // 0.1초씩 누적
+                mon->AddDeadTime(delta_time);
 
-                // 설정된 리스폰 시간이 다 지났다면?
                 if (mon->GetDeadTime() >= mon->GetRespawnSec()) {
                     mon->Respawn(); // 부활! (HP 꽉 채우고 제자리로)
 
-                    std::cout << "[System] 🦇 몬스터(ID:" << mon->GetId() << ")가 " << mon->GetRespawnSec() << "초가 지나서 리스폰되었습니다!\n";
+                    std::cout << "[System] 몬스터(ID:" << mon->GetId() << ")가 " << mon->GetRespawnSec() << "초가 지나서 리스폰되었습니다!\n";
 
                     // 부활한 사실을 주변 유저들에게 알려서 화면에 다시 나타나게 합니다.
                     auto aoi_uids = ctx.zone->GetPlayersInAOI(mon->GetPosition().x, mon->GetPosition().y);
@@ -204,7 +199,6 @@ void ScheduleNextAITick() {
 
                 continue; // ★ 죽어있는 동안은 밑에 있는 IDLE, CHASE 연산을 하지 않고 넘어갑니다.
             }
-            // ==========================================================
 
             float old_x = mon->GetPosition().x;
             float old_y = mon->GetPosition().y;
@@ -299,7 +293,7 @@ void ScheduleNextAITick() {
 }
 
 void StartAITickThread() {
-    auto& ctx = GameContext::Get(); // ★ 컨텍스트 소환
+    auto& ctx = GameContext::Get();
     g_ai_timer = std::make_unique<boost::asio::steady_timer>(ctx.io_context);
     g_last_ai_time = std::chrono::steady_clock::now();
 

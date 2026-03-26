@@ -8,6 +8,7 @@
 #include "../Common/DB/DBManager.h"
 #include "../Common/DataManager/DataManager.h"
 #include "../Common/Utils/Logger.h"
+#include "../Common/Redis/RedisManager.h"
 #include "Pathfinder/MapGenerator.h"
 #include "Monster/MonsterManager.h"
 
@@ -134,6 +135,21 @@ int main() {
         LOG_WARN("System", "config.json 설정에 따라 DB 연동을 건너뜁니다.");
     }
 
+    // =========================================================
+    // ★ [추가] Redis 연결 (config.json의 redis_info 설정에 따라)
+    // =========================================================
+    if (ConfigManager::GetInstance().UseRedis()) {
+        std::string redis_host = ConfigManager::GetInstance().GetRedisHost();
+        int redis_port = ConfigManager::GetInstance().GetRedisPort();
+
+        if (!RedisManager::GetInstance().Connect(redis_host, redis_port)) {
+            LOG_WARN("System", "Redis 연결 실패. Redis 없이 서버를 계속 실행합니다.");
+        }
+    }
+    else {
+        LOG_INFO("System", "config.json 설정에 따라 Redis 연동을 건너뜁니다.");
+    }
+
     auto& ctx = GameContext::Get();
 
     if (!ctx.dataManager.LoadAllData("JsonData/")) {
@@ -220,6 +236,11 @@ int main() {
 
     // ★ Graceful Shutdown
     ctx.Shutdown();
+
+    // ★ [추가] Redis 연결 해제
+    if (RedisManager::GetInstance().IsConnected()) {
+        RedisManager::GetInstance().Disconnect();
+    }
 
     g_main_io_context = nullptr;
     LOG_INFO("System", "서버가 안전하게 종료되었습니다.");

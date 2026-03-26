@@ -5,7 +5,7 @@
 #include <boost/property_tree/json_parser.hpp>
 
 // ==========================================
-// ★ [수정 1] 싱글톤 남용 개선: 의존성 주입(DI) 지원
+// ★ [수정] 싱글톤 남용 개선: 의존성 주입(DI) 지원
 //
 // 변경 전: private 생성자 + static Get() → 테스트 불가, 의존성 주입 불가능
 // 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 인스턴스 주입 가능
@@ -22,6 +22,11 @@ private:
     bool db_conn_ = false;
     std::string server_name_;
     std::string database_;
+
+    // ★ [추가] Redis 연동 설정
+    bool redis_conn_ = false;
+    std::string redis_host_ = "127.0.0.1";
+    int redis_port_ = 6379;
 
     short dummy_client_login_port_    = 0;
     short game_server_port_           = 0;
@@ -74,6 +79,11 @@ public:
             server_name_ = pt.get<std::string>("MSSQL_INFO.ServerName", ".\\SQLEXPRESS");
             database_    = pt.get<std::string>("MSSQL_INFO.Database", "game_db");
 
+            // ★ [추가] Redis 설정 로드
+            redis_conn_ = pt.get<bool>("redis_info.redis_conn", false);
+            redis_host_ = pt.get<std::string>("redis_info.redis_host", "127.0.0.1");
+            redis_port_ = pt.get<int>("redis_info.redis_port", 6379);
+
             dummy_client_login_port_ = pt.get<short>("dummy_client_info.login_server_port");
 
             game_server_port_        = pt.get<short>("game_server_info.game_server_port");
@@ -99,20 +109,29 @@ public:
             stress_login_server_port_  = pt.get<short>("stress_test_tool_info.login_server_port");
 
             std::cout << "[ConfigManager] 환경 설정 로드 성공! (DB 연동: "
-                << (db_conn_ ? "ON" : "OFF") << ")\n";
+                << (db_conn_ ? "ON" : "OFF") << ", Redis 연동: "
+                << (redis_conn_ ? "ON" : "OFF") << ")\n";
             if (db_conn_) {
                 std::cout << "  -> Target DB: " << server_name_ << " / " << database_ << "\n";
+            }
+            if (redis_conn_) {
+                std::cout << "  -> Target Redis: " << redis_host_ << ":" << redis_port_ << "\n";
             }
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[ConfigManager] 🚨 설정 파일(" << filePath << ") 읽기 실패: " << e.what() << "\n";
-            std::cerr << "[ConfigManager] 기본 설정(DB 연동 OFF)으로 진행합니다.\n";
+            std::cerr << "[ConfigManager] 설정 파일(" << filePath << ") 읽기 실패: " << e.what() << "\n";
+            std::cerr << "[ConfigManager] 기본 설정(DB 연동 OFF, Redis 연동 OFF)으로 진행합니다.\n";
             return false;
         }
     }
 
     bool UseDB() const { return db_conn_; }
+
+    // ★ [추가] Redis 설정 Getter
+    bool UseRedis() const { return redis_conn_; }
+    const std::string& GetRedisHost() const { return redis_host_; }
+    int GetRedisPort() const { return redis_port_; }
 
     const std::string& GetServerName()  const { return server_name_; }
     const std::string& GetDatabase()    const { return database_; }
@@ -138,6 +157,9 @@ public:
 
     // ★ [추가] 테스트 편의 Setter (프로덕션에서는 LoadConfig() 사용)
     void SetUseDB(bool use)                 { db_conn_ = use; }
+    void SetUseRedis(bool use)              { redis_conn_ = use; }
+    void SetRedisHost(const std::string& h) { redis_host_ = h; }
+    void SetRedisPort(int port)             { redis_port_ = port; }
     void SetGameServerPort(short port)      { game_server_port_ = port; }
     void SetLoginServerPort(short port)     { login_server_port_ = port; }
     void SetGatewayServerPort(short port)   { gateway_server_port_ = port; }
