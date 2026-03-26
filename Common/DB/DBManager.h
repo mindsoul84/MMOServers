@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <memory>
 #include <windows.h>
 #include <sql.h>
 #include <sqlext.h>
@@ -30,6 +31,10 @@ public:
     DBManager() = default;
     ~DBManager() { Disconnect(); }
 
+    // 복사/이동 금지 (ODBC 핸들은 복사 불가)
+    DBManager(const DBManager&) = delete;
+    DBManager& operator=(const DBManager&) = delete;
+
     // DB 연결 (config.json 세팅에 따라 호출됨)
     bool Connect();
 
@@ -44,6 +49,8 @@ public:
 };
 
 // =========================================================
-// ★ 2. [핵심] 이 스레드만의 전용 DB 매니저를 가리키는 포인터 선언!
+// raw 포인터 → unique_ptr 로 변경
+//   기존: thread_local DBManager* t_dbManager = nullptr;
+//   수정: 예외 발생 시에도 안전하게 자원 해제 보장
 // =========================================================
-extern thread_local DBManager* t_dbManager;
+extern thread_local std::unique_ptr<DBManager> t_dbManager;

@@ -7,12 +7,14 @@
 #include "../Common/ConfigManager.h"
 #include "../Common/DB/DBManager.h"
 #include "../Common/DataManager/DataManager.h"
+#include "../Common/Utils/Logger.h"
 #include "Pathfinder/MapGenerator.h"
 #include "Monster/MonsterManager.h"
 
 #include <iostream>
 #include <thread>
 #include <windows.h>
+#include <csignal>
 
 #include <recastnavigation/DetourNavMesh.h>
 #include <recastnavigation/DetourNavMeshBuilder.h>
@@ -20,10 +22,28 @@
 
 using boost::asio::ip::tcp;
 
-// ★ 정적 멤버 정의 (싱글톤 DI 오버라이드 포인터)
-// s_test_instance_ 는 헤더에서 inline 으로 정의됩니다. (중복 정의 제거)
-
 thread_local dtNavMeshQuery* t_navQuery = nullptr;
+
+// ==========================================
+// Graceful Shutdown을 위한 시그널 핸들러 추가
+//
+// 기존 문제: io_context.run()이 자연 종료만 대기, SIGTERM 무시
+// 수정: Ctrl+C(SIGINT) 수신 시 io_context.stop() → 워커 스레드 종료
+// ==========================================
+static boost::asio::io_context* g_main_io_context = nullptr;
+
+static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
+    if (ctrlType == CTRL_C_EVENT || ctrlType == CTRL_CLOSE_EVENT) {
+        LOG_INFO("System", "종료 신호 수신. Graceful Shutdown 시작...");
+        if (g_main_io_context) {
+            g_main_io_context->stop();
+        }
+        auto& ctx = GameContext::Get();
+        ctx.is_running_.store(false);
+        return TRUE;
+    }
+    return FALSE;
+}
 
 class GameNetworkServer {
     tcp::acceptor acceptor_;
@@ -36,7 +56,7 @@ private:
     void do_accept() {
         acceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
             if (!ec) {
-                std::cout << "[GameServer] S2S 통신: GatewayServer 접속 확인 완료!\n";
+                LOG_INFO("GameServer", "S2S 통신: GatewayServer 접속 확인 완료!");
                 auto new_session = std::make_shared<GatewaySession>(std::move(socket));
                 {
                     std::lock_guard<std::mutex> lock(GameContext::Get().gatewaySessionMutex);
@@ -58,34 +78,27 @@ void GameContext::BroadcastToGateways(uint16_t pktId, const google::protobuf::Me
     }
 }
 
-// ==========================================
-// ★ [수정 4] thread::detach 제거 → AddManagedThread()로 안전하게 관리
-//
-// 변경 전: std::thread(...).detach() → graceful shutdown 불가능
-// 변경 후: ctx.AddManagedThread(std::thread(...)) → Shutdown()에서 join 가능
-// ==========================================
 void StartAIThreadPool(int ai_thread_count) {
-    std::cout << "[System] 🧠 AI 전용 비동기 스레드 풀 가동 (" << ai_thread_count << "개)...\n";
+    LOG_INFO("System", "AI 전용 비동기 스레드 풀 가동 (" << ai_thread_count << "개)...");
     auto& ctx = GameContext::Get();
 
     for (int i = 0; i < ai_thread_count; ++i) {
-        // ★ [수정 4] detach() → AddManagedThread(): Shutdown()에서 join() 가능
         ctx.AddManagedThread(std::thread([i, &ctx]() {
             t_navQuery = dtAllocNavMeshQuery();
             if (t_navQuery) {
                 dtStatus status = t_navQuery->init(ctx.navMesh.GetRawNavMesh(), 2048);
                 if (dtStatusFailed(status)) {
-                    std::cerr << "[AI Thread " << i << "] NavMeshQuery 초기화 실패\n";
+                    LOG_ERROR("AI", "Thread " << i << " NavMeshQuery 초기화 실패");
                 }
             }
 
-            ctx.ai_io_context.run(); // is_running_ == false 이거나 stop() 호출 시 반환
+            ctx.ai_io_context.run();
 
             if (t_navQuery) {
                 dtFreeNavMeshQuery(t_navQuery);
                 t_navQuery = nullptr;
             }
-            std::cout << "[AI Thread " << i << "] 정상 종료됨.\n";
+            LOG_INFO("AI", "Thread " << i << " 정상 종료됨.");
         }));
     }
 }
@@ -93,34 +106,38 @@ void StartAIThreadPool(int ai_thread_count) {
 int main() {
     SetConsoleOutputCP(CP_UTF8);
 
+    // 시그널 핸들러 등록
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
     HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\GameServer_Unique_Mutex_Lock");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        std::cerr << "🚨 [Error] GameServer가 이미 실행 중입니다. 창을 닫습니다.\n";
+        LOG_FATAL("Error", "GameServer가 이미 실행 중입니다. 창을 닫습니다.");
         CloseHandle(hMutex);
         return 1;
     }
 
     if (!ConfigManager::GetInstance().LoadConfig("config.json")) {
-        std::cerr << "🚨 config 설정 파일 오류로 인해 GameServer 종료합니다.\n";
+        LOG_FATAL("System", "config 설정 파일 오류로 인해 GameServer 종료합니다.");
         system("pause");
         return -1;
     }
 
+    // raw new → unique_ptr (make_unique 사용)
     if (ConfigManager::GetInstance().UseDB()) {
-        t_dbManager = new DBManager();
+        t_dbManager = std::make_unique<DBManager>();
         if (!t_dbManager->Connect()) {
-            std::cerr << "DB 연결에 실패하여 서버를 종료합니다.\n";
+            LOG_FATAL("System", "DB 연결에 실패하여 서버를 종료합니다.");
             return -1;
         }
     }
     else {
-        std::cout << "[System] ⚠️ config.json 설정에 따라 DB 연동을 건너뜁니다.\n";
+        LOG_WARN("System", "config.json 설정에 따라 DB 연동을 건너뜁니다.");
     }
 
     auto& ctx = GameContext::Get();
 
     if (!ctx.dataManager.LoadAllData("JsonData/")) {
-        std::cerr << "몬스터 데이터를 불러오지 못해 서버를 종료합니다.\n";
+        LOG_FATAL("System", "몬스터 데이터를 불러오지 못해 서버를 종료합니다.");
         return -1;
     }
 
@@ -147,7 +164,10 @@ int main() {
     try {
         short game_port = ConfigManager::GetInstance().GetGameServerPort();
         GameNetworkServer server(ctx.io_context, game_port);
-        std::cout << "[System] 코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young\n";
+        LOG_INFO("System", "코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young");
+
+        // 시그널 핸들러에서 io_context를 정지시킬 수 있도록 포인터 저장
+        g_main_io_context = &ctx.io_context;
 
         ctx.worldConnection = std::make_shared<WorldConnection>(ctx.io_context);
         short world_port = ConfigManager::GetInstance().GetGameWorldConnPort();
@@ -155,57 +175,53 @@ int main() {
 
         unsigned int max_thread_count = ConfigManager::GetInstance().GetGameMaxThreadCount();
         if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
-        std::cout << "[System] 워커 스레드 개수 설정: " << max_thread_count << "개\n";
+        LOG_INFO("System", "워커 스레드 개수 설정: " << max_thread_count << "개");
 
 #ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
-        // ★ [수정 4] watchdog detach() → AddManagedThread()
-        // is_running_ 플래그로 루프를 제어하여 graceful shutdown 지원
         ctx.AddManagedThread(std::thread([]() {
             uint64_t last_count = 0;
             auto& ctx = GameContext::Get();
 
             while (ctx.is_running_.load()) {
                 std::this_thread::sleep_for(std::chrono::seconds(5));
-                if (!ctx.is_running_.load()) break; // sleep 중 shutdown 신호 수신
+                if (!ctx.is_running_.load()) break;
 
                 uint64_t current_count = ctx.processed_packet_count.load();
                 int bot_count = ctx.connected_bot_count.load();
 
                 if (bot_count > 0 && current_count == last_count) {
-                    std::cerr << "\n🚨🚨 [Watchdog] FATAL ERROR: 5초간 처리된 패킷이 0개입니다! 데드락 발생 의심!!! 🚨🚨\n\n";
+                    LOG_FATAL("Watchdog", "5초간 처리된 패킷이 0개입니다! 데드락 발생 의심!!!");
                 }
                 else if (bot_count > 0) {
-                    std::cout << "⏱️ [Watchdog] 서버 정상 틱 동작 중 (5초간 처리량: "
-                        << (current_count - last_count) << " pkts)\n";
+                    LOG_INFO("Watchdog", "서버 정상 틱 동작 중 (5초간 처리량: " << (current_count - last_count) << " pkts)");
                 }
                 last_count = current_count;
             }
-            std::cout << "[Watchdog] 정상 종료됨.\n";
+            LOG_INFO("Watchdog", "정상 종료됨.");
         }));
 #endif
 
-        std::cout << "[System] 여러 스레드에서 io_context.run()을 호출하여 스레드 풀을 구성합니다...\n";
+        LOG_INFO("System", "스레드 풀 구성 중...");
         std::vector<std::thread> threads;
         for (unsigned int i = 0; i < max_thread_count; ++i) {
             threads.emplace_back([&ctx]() {
                 ctx.io_context.run();
             });
         }
-        std::cout << "[System] 스레드 풀 구성 완료.\n";
-        std::cout << "=================================================\n";
-        std::cout << "[System] GatewayServer의 S2S 접속을 기다리는 중...\n";
+        LOG_INFO("System", "스레드 풀 구성 완료. GatewayServer S2S 접속 대기 중...");
 
         for (auto& t : threads) {
             if (t.joinable()) t.join();
         }
     }
     catch (std::exception& e) {
-        std::cerr << "[Error] 예외 발생: " << e.what() << "\n";
+        LOG_FATAL("Error", "예외 발생: " << e.what());
     }
 
-    // ★ [수정 4] Graceful Shutdown: AI 스레드, watchdog 스레드 모두 join
+    // ★ Graceful Shutdown
     ctx.Shutdown();
 
-    std::cout << "[System] 서버가 안전하게 종료되었습니다.\n";
+    g_main_io_context = nullptr;
+    LOG_INFO("System", "서버가 안전하게 종료되었습니다.");
     return 0;
 }

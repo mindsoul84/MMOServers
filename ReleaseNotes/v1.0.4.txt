@@ -1,0 +1,114 @@
+﻿[v1.0.4 수정 요약]
+ㆍ버그 수정
+ㆍ코드 개선 (리팩토링)
+ㆍ일부 코드 수정
+
+================================================================================
+1. 버그 수정
+================================================================================
+
+■ BUG-FIX-1: 예측 가능한 세션 토큰 → 암호학적 랜덤 토큰
+  수정 파일: Common/Utils/TokenUtils.h (신규), WorldServer/Handlers/WorldHandlers.cpp
+  
+  변경 전: "WORLD_1_TOKEN_myid" → 예측 가능, 보안 무의미
+  변경 후: TokenUtils::GenerateSessionToken(32) → 64자 랜덤 hex 문자열
+           std::random_device 기반으로 OS 엔트로피 소스에서 시드 생성
+
+■ BUG-FIX-2: TCP 패킷 헤더 검증 일관성 강화
+  수정 파일: WorldServer/WorldServer.cpp 외 모든 세션 파일
+  
+  모든 세션의 ReadHeader()에서 header_.size 범위 체크 통일:
+    if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE)
+
+■ BUG-FIX-3: DBManager ODBC 호출 리턴값 검증 누락 수정
+  수정 파일: Common/DB/DBManager.cpp
+  
+  변경 전: SQLBindParameter(), SQLExecute() 리턴 코드 무시
+  변경 후: 모든 ODBC 호출마다 리턴값 체크 → 실패 시 로그 출력 + 핸들 해제 + 즉시 반환
+  
+  검증 추가 위치:
+    - ProcessLogin() STEP 1: SELECT 관련 SQLBindParameter(1), SQLExecute
+    - ProcessLogin() STEP 2: INSERT 관련 SQLBindParameter(1~4) 각각
+
+================================================================================
+2. 코드 개선 (리팩토링)
+================================================================================
+
+■ REFACTOR-1: #ifdef DEF_STRESS_TEST_SERVER 코드 중복 제거
+  수정 파일: GameServer/Handlers/GatewayGame/GatewayHandlers.cpp
+  
+  변경 전: Handle_GatewayGameMoveReq, Handle_GatewayGameLeaveReq, Handle_GatewayGameAttackReq
+           각각 스트레스 모드/일반 모드로 전체 함수가 복사되어 있었음
+           → 한쪽 수정 시 다른 쪽에 반영 누락 (v1.0.3 버그의 근본 원인)
+           → Zone::UpdatePosition과 좌표 갱신의 원자성 불일치
+  
+  변경 후: 하나의 통합 구현으로 병합
+           → DEF_STRESS_TEST_DEADLOCK_WATCHDOG 카운터만 조건부 컴파일
+           → Zone::UpdatePosition을 player lock 안에서 호출하여 원자성 보장
+           → 데드락 방지를 위해 gameStateMutex를 Zone 호출 전에 해제하는 패턴 통일
+  
+  삭제된 코드량: 약 200줄 (중복 제거)
+
+■ REFACTOR-2: raw new/delete → std::unique_ptr 변경 (RAII 패턴)
+  수정 파일: Common/DB/DBManager.h, GameServer/GameServer.cpp, LoginServer/LoginServer.cpp
+  
+  변경 전: thread_local DBManager* t_dbManager = nullptr;
+           t_dbManager = new DBManager();  → 예외 시 메모리 누수
+           delete t_dbManager;             → 수동 해제 필요
+  
+  변경 후: thread_local std::unique_ptr<DBManager> t_dbManager = nullptr;
+           t_dbManager = std::make_unique<DBManager>();  → 예외 안전
+           t_dbManager.reset();                          → 자동 해제
+
+================================================================================
+3. 코드 수정/추가
+================================================================================
+
+■ IMPL-1: Graceful Shutdown 시그널 핸들러 추가
+  수정 파일: GameServer/GameServer.cpp, LoginServer/LoginServer.cpp, WorldServer/WorldServer.cpp
+  
+  변경 전: Ctrl+C 시 io_context.run() 자연 종료만 대기
+           → 워커 스레드가 무한 대기 상태에 빠질 수 있음
+           → 비동기 작업 중 강제 종료로 리소스 누수 가능
+  
+  변경 후: Windows SetConsoleCtrlHandler() 등록
+           → CTRL_C_EVENT / CTRL_CLOSE_EVENT 수신 시:
+              1) io_context.stop() 호출 → 워커 스레드 즉시 종료
+              2) is_running_ = false → 백그라운드 루프 종료 신호
+              3) Shutdown() 에서 모든 managed_threads_ join
+
+■ IMPL-2: 로깅 시스템 도입 (Logger 유틸리티)
+  수정 파일: Common/Utils/Logger.h (신규), 전체 서버 파일
+  
+  기존 문제: std::cout/cerr 직접 출력
+           → 로그 레벨 없음, 타임스탬프 없음, 스레드 안전하지 않음
+  
+  추가 기능:
+    - 로그 레벨: TRACE, DEBUG, INFO, WARN, ERROR, FATAL
+    - 자동 타임스탬프: [2025-01-01 12:34:56.789]
+    - 스레드 안전: std::mutex 기반 출력 직렬화
+    - 파일 로깅: Logger::EnableFileLog("server.log") 으로 선택적 활성화
+    - 매크로: LOG_INFO("Tag", "메시지: " << value) 형태의 스트림 문법 지원
+    - 레벨 필터: Logger::SetLevel(LogLevel::WARN) 으로 출력 레벨 제어
+
+  사용 예:
+    LOG_INFO("GameServer", "유저 접속: " << account_id);
+    LOG_ERROR("DBManager", "DB 연결 실패: " << ec.message());
+    LOG_WARN("Network", "패킷 크기 초과: " << totalSize);
+
+================================================================================
+수정 파일 목록
+================================================================================
+[신규]
+  Common/Utils/Logger.h          — 로깅 유틸리티 (레벨, 타임스탬프, 파일 출력)
+  Common/Utils/TokenUtils.h      — 보안 토큰 생성 유틸리티
+  ReleaseNotes/v1.0.4.txt        — 이 파일
+
+[수정]
+  Common/DB/DBManager.h          — thread_local raw ptr → unique_ptr
+  Common/DB/DBManager.cpp        — ODBC 리턴값 검증 강화, Logger 적용
+  GameServer/GameServer.cpp      — 시그널 핸들러, unique_ptr, Logger
+  GameServer/Handlers/GatewayGame/GatewayHandlers.cpp — #ifdef 중복 제거 (통합)
+  LoginServer/LoginServer.cpp    — 시그널 핸들러, unique_ptr, Logger
+  WorldServer/WorldServer.cpp    — 시그널 핸들러, 헤더 검증, Logger
+  WorldServer/Handlers/WorldHandlers.cpp — 보안 토큰, Logger
