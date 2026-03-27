@@ -20,12 +20,6 @@
 #include <cmath>
 #include <boost/asio.hpp>
 
-// ==========================================
-// [삭제됨] 외부 전역 변수들(extern) 및 PlayerInfo 구조체 중복 선언 삭제 
-// (모두 GameServer.h 의 GameContext 로 통합되었습니다)
-// ==========================================
-
-// 타이머와 상태 저장을 위한 변수 (이 파일에서만 쓰이므로 static으로 보호)
 static std::unique_ptr<boost::asio::steady_timer> g_ai_timer;
 static auto g_last_ai_time = std::chrono::steady_clock::now();
 static std::unordered_map<uint64_t, float> g_sync_timers;
@@ -35,23 +29,22 @@ static const float NETWORK_SYNC_INTERVAL = 2.0f;
 // 몬스터 초기 스폰 함수
 // ==========================================
 void InitMonsters() {
-    auto& ctx = GameContext::Get(); // ★ 컨텍스트 소환
+    auto& ctx = GameContext::Get();
 
     const auto& spawnList = ctx.dataManager.GetMonsterData().GetMonsterSpawnList();
 
     for (const auto& spawn_data : spawnList) {
         uint64_t mon_id = spawn_data.mon_id;
-        // g_navMesh -> ctx.navMesh 로 변경
         auto mon = std::make_shared<Monster>(mon_id, &ctx.navMesh);
 
         mon->SetOnAttackCallback([](uint64_t attacker_uid, uint64_t target_uid, int damage) {
-            auto& ctx_inner = GameContext::Get(); // ★ 콜백 내부용 컨텍스트 소환
+            auto& ctx_inner = GameContext::Get();
             std::shared_ptr<PlayerInfo> player_ptr;
             std::string acc_id_str;
 
-            // ★ 유저 찾기 (읽기 락)
+            // playerMutex_ 읽기 락: 유저 찾기
             {
-                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.gameStateMutex);
+                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.playerMutex_);
                 auto it_acc = ctx_inner.uidToAccount.find(target_uid);
                 if (it_acc == ctx_inner.uidToAccount.end()) return;
                 acc_id_str = it_acc->second;
@@ -64,10 +57,9 @@ void InitMonsters() {
             int remain_hp = 0;
             float p_x, p_y;
 
-            // ★ 유저 체력 깎기 (개별 유저 락)
+            // 개별 유저 락으로 체력 깎기
             {
                 std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
-
                 player_ptr->hp -= damage;
                 if (player_ptr->hp < 0) player_ptr->hp = 0;
                 remain_hp = player_ptr->hp;
@@ -75,12 +67,8 @@ void InitMonsters() {
                 p_y = player_ptr->y;
             }
 
-            // ★ [추가] Redis HP 실시간 갱신 (몬스터에게 피격)
             RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, remain_hp);
 
-            // =====================================================================
-            // ★ 죽었든 살았든, 무조건 '타격 결과(ATTACK_RES)'부터 먼저 전송
-            // =====================================================================
             Protocol::GameGatewayAttackRes s2s_res;
             s2s_res.set_attacker_uid(attacker_uid);
             s2s_res.set_target_uid(target_uid);
@@ -89,10 +77,15 @@ void InitMonsters() {
             s2s_res.set_target_remain_hp(remain_hp);
 
             auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(p_x, p_y);
-            for (uint64_t aoi_uid : aoi_uids) {
-                auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
-                if (target_acc != ctx_inner.uidToAccount.end()) {
-                    s2s_res.add_target_account_ids(target_acc->second);
+
+            // playerMutex_ 읽기 락: AOI 유저 이름 조회
+            {
+                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.playerMutex_);
+                for (uint64_t aoi_uid : aoi_uids) {
+                    auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
+                    if (target_acc != ctx_inner.uidToAccount.end()) {
+                        s2s_res.add_target_account_ids(target_acc->second);
+                    }
                 }
             }
 
@@ -102,7 +95,7 @@ void InitMonsters() {
                 << ")를 공격! 데미지: " << damage << ", 남은 체력: " << remain_hp << "\n";
 
             // =====================================================================
-            // ★ 유저 기절 시 마을로 텔레포트 처리
+            // 유저 기절 시 마을로 텔레포트 처리
             // =====================================================================
             if (remain_hp <= 0) {
                 std::cout << "\n[System] 당신(" << acc_id_str << ")은 체력이 0이되어 기절했습니다. 마을(X:0, Y:0)로 복귀합니다.\n\n";
@@ -117,7 +110,7 @@ void InitMonsters() {
                     player_ptr->y = 0.0f;
                 }
 
-                // ★ [추가] Redis HP 갱신 (부활: HP 100으로 복구)
+                // Redis HP 갱신 (부활: HP 100으로 복구)
                 RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, 100);
 
                 ctx_inner.zone->UpdatePosition(target_uid, old_x, old_y, 0.0f, 0.0f);
@@ -135,7 +128,7 @@ void InitMonsters() {
             }
         });
 
-        // ★ JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여
+        // JSON에서 읽어온 체력과 리스폰 시간을 몬스터에게 부여
         mon->SetMaxHp(spawn_data.hp);
         mon->SetRespawnSec(spawn_data.respawn_sec);
 
@@ -164,16 +157,17 @@ void ScheduleNextAITick() {
         float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
         g_last_ai_time = current_time;
 
-        std::shared_lock<std::shared_mutex> lock(ctx.gameStateMutex);
+        // monsterMutex_ 읽기 락: 몬스터 상태 읽기 (playerMutex_와 독립)
+        std::shared_lock<std::shared_mutex> mon_lock(ctx.monsterMutex_);
 
         for (auto& mon : ctx.monsters) {
 
-            // ★ 몬스터가 죽어있다면 타이머를 돌리고 부활
+            // 몬스터가 죽어있다면 타이머를 돌리고 부활
             if (mon->GetState() == MonsterState::DEAD) {
                 mon->AddDeadTime(delta_time);
 
                 if (mon->GetDeadTime() >= mon->GetRespawnSec()) {
-                    mon->Respawn(); // 부활! (HP 꽉 채우고 제자리로)
+                    mon->Respawn();
 
                     std::cout << "[System] 몬스터(ID:" << mon->GetId() << ")가 " << mon->GetRespawnSec() << "초가 지나서 리스폰되었습니다!\n";
 
@@ -187,17 +181,22 @@ void ScheduleNextAITick() {
                         s2s_res.set_z(mon->GetPosition().z);
                         s2s_res.set_yaw(0.0f);
 
-                        for (uint64_t target_uid : aoi_uids) {
-                            auto it = ctx.uidToAccount.find(target_uid);
-                            if (it != ctx.uidToAccount.end()) {
-                                s2s_res.add_target_account_ids(it->second);
+                        // playerMutex_ 읽기 락: uidToAccount 조회
+                        // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (항상 이 순서로 획득)
+                        {
+                            std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+                            for (uint64_t target_uid : aoi_uids) {
+                                auto it = ctx.uidToAccount.find(target_uid);
+                                if (it != ctx.uidToAccount.end()) {
+                                    s2s_res.add_target_account_ids(it->second);
+                                }
                             }
                         }
                         ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
                     }
                 }
 
-                continue; // ★ 죽어있는 동안은 밑에 있는 IDLE, CHASE 연산을 하지 않고 넘어갑니다.
+                continue;
             }
 
             float old_x = mon->GetPosition().x;
@@ -205,16 +204,21 @@ void ScheduleNextAITick() {
 
             if (mon->GetState() == MonsterState::IDLE) {
                 auto aoi_uids = ctx.zone->GetPlayersInAOI(old_x, old_y);
-                for (uint64_t uid : aoi_uids) {
-                    auto it_acc = ctx.uidToAccount.find(uid);
-                    if (it_acc != ctx.uidToAccount.end()) {
-                        auto it_player = ctx.playerMap.find(it_acc->second);
-                        if (it_player != ctx.playerMap.end()) {
-                            float dx = it_player->second->x - old_x;
-                            float dy = it_player->second->y - old_y;
-                            if (std::sqrt(dx * dx + dy * dy) < 1.0f) {
-                                mon->SetTarget(uid, { it_player->second->x, it_player->second->y, 0.0f });
-                                break;
+
+                // playerMutex_ 읽기 락: 유저 위치 조회
+                {
+                    std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+                    for (uint64_t uid : aoi_uids) {
+                        auto it_acc = ctx.uidToAccount.find(uid);
+                        if (it_acc != ctx.uidToAccount.end()) {
+                            auto it_player = ctx.playerMap.find(it_acc->second);
+                            if (it_player != ctx.playerMap.end()) {
+                                float dx = it_player->second->x - old_x;
+                                float dy = it_player->second->y - old_y;
+                                if (std::sqrt(dx * dx + dy * dy) < 1.0f) {
+                                    mon->SetTarget(uid, { it_player->second->x, it_player->second->y, 0.0f });
+                                    break;
+                                }
                             }
                         }
                     }
@@ -223,15 +227,19 @@ void ScheduleNextAITick() {
             else if (mon->GetState() == MonsterState::CHASE) {
                 uint64_t target_uid = mon->GetTargetUserId();
                 bool target_found = false;
-                auto it_acc = ctx.uidToAccount.find(target_uid);
-                if (it_acc != ctx.uidToAccount.end()) {
-                    auto it_player = ctx.playerMap.find(it_acc->second);
-                    if (it_player != ctx.playerMap.end()) {
-                        float dx = it_player->second->x - old_x;
-                        float dy = it_player->second->y - old_y;
-                        if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
-                            mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
-                            target_found = true;
+
+                {
+                    std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+                    auto it_acc = ctx.uidToAccount.find(target_uid);
+                    if (it_acc != ctx.uidToAccount.end()) {
+                        auto it_player = ctx.playerMap.find(it_acc->second);
+                        if (it_player != ctx.playerMap.end()) {
+                            float dx = it_player->second->x - old_x;
+                            float dy = it_player->second->y - old_y;
+                            if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
+                                mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
+                                target_found = true;
+                            }
                         }
                     }
                 }
@@ -240,15 +248,19 @@ void ScheduleNextAITick() {
             else if (mon->GetState() == MonsterState::ATTACK) {
                 uint64_t target_uid = mon->GetTargetUserId();
                 bool target_found = false;
-                auto it_acc = ctx.uidToAccount.find(target_uid);
-                if (it_acc != ctx.uidToAccount.end()) {
-                    auto it_player = ctx.playerMap.find(it_acc->second);
-                    if (it_player != ctx.playerMap.end()) {
-                        float dx = it_player->second->x - old_x;
-                        float dy = it_player->second->y - old_y;
-                        if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
-                            mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
-                            target_found = true;
+
+                {
+                    std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+                    auto it_acc = ctx.uidToAccount.find(target_uid);
+                    if (it_acc != ctx.uidToAccount.end()) {
+                        auto it_player = ctx.playerMap.find(it_acc->second);
+                        if (it_player != ctx.playerMap.end()) {
+                            float dx = it_player->second->x - old_x;
+                            float dy = it_player->second->y - old_y;
+                            if (std::sqrt(dx * dx + dy * dy) <= 3.0f) {
+                                mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
+                                target_found = true;
+                            }
                         }
                     }
                 }
@@ -276,10 +288,13 @@ void ScheduleNextAITick() {
                         s2s_res.set_z(mon->GetPosition().z);
                         s2s_res.set_yaw(0.0f);
 
-                        for (uint64_t target_uid : aoi_uids) {
-                            auto it = ctx.uidToAccount.find(target_uid);
-                            if (it != ctx.uidToAccount.end()) {
-                                s2s_res.add_target_account_ids(it->second);
+                        {
+                            std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+                            for (uint64_t target_uid : aoi_uids) {
+                                auto it = ctx.uidToAccount.find(target_uid);
+                                if (it != ctx.uidToAccount.end()) {
+                                    s2s_res.add_target_account_ids(it->second);
+                                }
                             }
                         }
                         ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);

@@ -13,18 +13,19 @@
 #include <shared_mutex>
 
 // ==========================================
-// ★ [리팩토링]
+// [락 설계 개선] playerMutex_ / monsterMutex_ 분리 적용
 //
-// 기존 문제: 스트레스 모드와 일반 모드가 전체 함수 복사로 분기
-//   -> 한쪽 수정 시 다른 쪽 반영 누락
-//   -> Zone::UpdatePosition과 좌표 갱신의 원자성 불일치
+// 변경 전: 단일 gameStateMutex로 플레이어+몬스터 동시 보호
+//   -> 몬스터 AI Tick 중 플레이어 이동이 대기
+//   -> 대규모 동접 시 심각한 병목
 //
-// 수정: 하나의 통합 구현으로 병합
-//   -> DEF_STRESS_TEST_DEADLOCK_WATCHDOG 카운터만 조건부 적용
-//   -> Zone::UpdatePosition을 player lock 안에서 호출 (원자성 보장)
+// 변경 후: 각 핸들러에서 필요한 락만 최소 범위로 획득
+//   -> playerMutex_: playerMap, uidToAccount 보호
+//   -> monsterMutex_: monsterMap 보호 (공격 시에만 사용)
+//   -> uidCounter: atomic 연산으로 락 불필요
 // ==========================================
 
-// [게이트웨이 -> 게임서버] 유저 이동 처리 (통합 버전)
+// [게이트웨이 -> 게임서버] 유저 이동 처리
 void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
 
     auto req = std::make_shared<Protocol::GatewayGameMoveReq>();
@@ -39,7 +40,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
     float new_x = req->x();
     float new_y = req->y();
 
-    // 맵 이탈 방지 (상수 사용)
+    // 맵 이탈 방지
     if (new_x < 0.0f) new_x = 0.0f;
     if (new_y < 0.0f) new_y = 0.0f;
     if (new_x > GameConstants::Map::WIDTH) new_x = GameConstants::Map::WIDTH;
@@ -47,23 +48,23 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
     std::shared_ptr<PlayerInfo> player_ptr;
 
-    // ★ 1단계: 글로벌 읽기 락으로 유저가 있는지 확인
+    // 1단계: playerMutex_ 읽기 락으로 유저 검색
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
         auto it = ctx.playerMap.find(acc_id);
         if (it != ctx.playerMap.end()) player_ptr = it->second;
     }
 
-    // ★ 2단계: 유저가 없다면 신규 진입 (Double-checked locking)
+    // 2단계: 유저가 없다면 신규 진입 (Double-checked locking)
     if (!player_ptr) {
         bool is_new = false;
-        uint64_t new_uid = 0;
 
         {
-            std::unique_lock<std::shared_mutex> write_lock(ctx.gameStateMutex);
+            std::unique_lock<std::shared_mutex> write_lock(ctx.playerMutex_);
             auto it = ctx.playerMap.find(acc_id);
             if (it == ctx.playerMap.end()) {
-                new_uid = ctx.uidCounter++;
+                // atomic uidCounter: 락 없이 안전한 UID 발급
+                uint64_t new_uid = ctx.uidCounter.fetch_add(1, std::memory_order_relaxed);
                 player_ptr = std::make_shared<PlayerInfo>();
                 player_ptr->uid = new_uid;
                 player_ptr->x = new_x;
@@ -76,7 +77,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
             else {
                 player_ptr = it->second;
             }
-        } // gameStateMutex 쓰기 락 해제
+        }
 
         if (is_new) {
 #ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
@@ -84,15 +85,13 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
                 ctx.connected_bot_count.fetch_add(1, std::memory_order_relaxed);
             }
 #endif
-            ctx.zone->EnterZone(new_uid, new_x, new_y);
-            LOG_INFO("GameServer", "유저(" << acc_id << ") 최초 Zone 진입 (UID:" << new_uid << ")");
-
-            // ★ [추가] Redis에 유저 정보 저장 (접속 시 account_id + 기본 HP)
+            ctx.zone->EnterZone(player_ptr->uid, new_x, new_y);
+            LOG_INFO("GameServer", "유저(" << acc_id << ") 최초 Zone 진입 (UID:" << player_ptr->uid << ")");
             RedisManager::GetInstance().SetPlayerOnline(acc_id, GameConstants::Player::DEFAULT_HP);
         }
     }
 
-    // ★ 3단계: 좌표 갱신 + Zone::UpdatePosition을 동일 락 안에서 수행 (원자성 보장)
+    // 3단계: 좌표 갱신 + Zone::UpdatePosition (개별 유저 락)
     {
         std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
         float old_x = player_ptr->x;
@@ -110,8 +109,9 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
     s2s_res.set_x(new_x);
     s2s_res.set_y(new_y);
 
+    // AOI 대상 account_id 조회: playerMutex_ 읽기 락
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
 
         int broadcast_limit = 0;
         for (uint64_t target_uid : aoi_uids) {
@@ -126,7 +126,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
     session->Send(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
 }
 
-// [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러 (통합 버전)
+// [게이트웨이 -> 게임서버] 유저 퇴장 처리 핸들러
 void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::GatewayGameLeaveReq>();
     if (!req->ParseFromArray(payload, payloadSize)) {
@@ -137,14 +137,14 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
     auto& ctx = GameContext::Get();
     std::string acc_id = req->account_id();
 
-    // ★ LeaveZone 호출 전에 gameStateMutex 락 해제 (데드락 방지)
     uint64_t uid = 0;
     float last_x = 0.0f;
     float last_y = 0.0f;
     bool found = false;
 
+    // playerMutex_ 쓰기 락으로 삭제
     {
-        std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);
+        std::unique_lock<std::shared_mutex> lock(ctx.playerMutex_);
         auto it = ctx.playerMap.find(acc_id);
         if (it != ctx.playerMap.end()) {
             uid = it->second->uid;
@@ -155,7 +155,7 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
             ctx.playerMap.erase(it);
             found = true;
         }
-    } // gameStateMutex 쓰기 락 해제
+    }
 
     if (found) {
 #ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
@@ -163,15 +163,14 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
             ctx.connected_bot_count.fetch_sub(1, std::memory_order_relaxed);
         }
 #endif
+        // Zone 조작은 playerMutex_ 밖에서 수행 (데드락 방지)
         ctx.zone->LeaveZone(uid, last_x, last_y);
         LOG_INFO("GameServer", "유저(" << acc_id << ", UID:" << uid << ") 퇴장 완료. Zone에서 삭제됨.");
-
-        // ★ [추가] Redis에서 유저 정보 삭제
         RedisManager::GetInstance().RemovePlayer(acc_id);
     }
 }
 
-// [게이트웨이 -> 게임서버] 유저의 공격 요청 처리 (통합 버전)
+// [게이트웨이 -> 게임서버] 유저의 공격 요청 처리
 void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t size) {
 
     auto req = std::make_shared<Protocol::GatewayGameAttackReq>();
@@ -190,8 +189,9 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     }
 #endif
 
+    // playerMutex_ 읽기 락: 플레이어 검색
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
         auto it_player = ctx.playerMap.find(account_id);
         if (it_player == ctx.playerMap.end()) return;
         player_ptr = it_player->second;
@@ -213,9 +213,9 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     auto aoi_mon_ids = ctx.zone->GetMonstersInAOI(p_x, p_y);
 
-    // ★ TakeDamage 호출 전 gameStateMutex 락 해제
+    // monsterMutex_ 읽기 락: 몬스터 검색 (playerMutex_와 독립)
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        std::shared_lock<std::shared_mutex> read_lock(ctx.monsterMutex_);
         for (uint64_t mon_id : aoi_mon_ids) {
             auto it_mon = ctx.monsterMap.find(mon_id);
             if (it_mon == ctx.monsterMap.end()) continue;
@@ -232,7 +232,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
                 min_dist = dist;
             }
         }
-    } // gameStateMutex 읽기 락 해제
+    }
 
     // 사거리 내에 몬스터가 없을 경우
     if (!target_monster) {
@@ -244,7 +244,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
         return;
     }
 
-    // 데미지 연산 (gameStateMutex 밖에서 안전하게 수행)
+    // 데미지 연산 (모든 글로벌 락 밖에서 안전하게 수행)
     int damage = p_atk - target_monster->GetDef();
     if (damage < GameConstants::Combat::MIN_DAMAGE) damage = GameConstants::Combat::MIN_DAMAGE;
 
@@ -261,8 +261,9 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     s2s_res.set_target_remain_hp(remain_hp);
 
     auto aoi_uids = ctx.zone->GetPlayersInAOI(p_x, p_y);
+    // playerMutex_ 읽기 락: AOI 유저 이름 조회
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.gameStateMutex);
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
 
         int broadcast_limit = 0;
         for (uint64_t uid : aoi_uids) {

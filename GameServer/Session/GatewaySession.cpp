@@ -13,7 +13,7 @@ void GatewaySession::start() {
 }
 
 // ==========================================
-// ★ [수정] Send() - 메모리 풀 활용으로 통일
+// [수정] Send() - 메모리 풀 활용으로 통일
 //
 // 변경 전: make_shared<SendBuffer>(totalSize) → 매번 힙 할당
 //   → 대규모 동접 시 new/delete가 초당 수만 회 발생하여 힙 할당자 병목 유발
@@ -35,7 +35,7 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
         return;
     }
 
-    // ★ [수정] 메모리 풀에서 버퍼 대여 (전송 완료 시 SendBufferDeleter가 자동 반납)
+    // [수정] 메모리 풀에서 버퍼 대여 (전송 완료 시 SendBufferDeleter가 자동 반납)
     SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
     std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
@@ -45,7 +45,7 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
 
     auto self(shared_from_this());
 
-    // ★ [수정] 람다 캡처에 totalSize를 추가합니다.
+    // [수정] 람다 캡처에 totalSize를 추가합니다.
     boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
         // [Backpressure] 큐가 SEND_QUEUE_MAX_SIZE 이상 쌓이면 서버가 뻗지 않도록 패킷 드랍
         if (send_queue_.size() > GameConstants::Network::SEND_QUEUE_MAX_SIZE) {
@@ -116,7 +116,7 @@ void GatewaySession::ReadHeader() {
 
                 if (payload_size == 0) {
                     auto session_ptr = self;
-                    // ★ [수정] GameContext의 디스패처 사용
+                    // [수정] GameContext의 디스패처 사용
                     GameContext::Get().gatewayDispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
                     ReadHeader();
                 }
@@ -127,7 +127,7 @@ void GatewaySession::ReadHeader() {
             }
             else {
                 std::cout << "[GameServer] GatewayServer와의 S2S 연결 해제됨.\n";
-                // ★ [수정] 삭제 로직 대신 함수 호출
+                // [수정] 삭제 로직 대신 함수 호출
                 OnDisconnected();
             }
         });

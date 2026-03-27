@@ -110,7 +110,7 @@ bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string
 // =======================================================
 // [3] 백그라운드 수신 스레드 가동 함수
 // =======================================================
-// ★ [수정 4] detach() 제거: 스레드를 반환하여 호출부에서 join 가능하게 변경
+// [수정] detach() 제거: 스레드를 반환하여 호출부에서 join 가능하게 변경
 // 변경 전: void 반환 + detach() → 수명 관리 불가, 소켓 댕글링 위험
 // 변경 후: std::thread 반환 → 호출부에서 joinable 상태로 유지 및 join 가능
 std::thread StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my_x, float& my_y, int& my_hp, std::unordered_map<std::string, std::pair<float, float>>& monster_pos_map) {
@@ -261,7 +261,7 @@ int main() {
         
         std::unordered_map<std::string, std::pair<float, float>> monster_pos_map;   // 이 클라이언트만의 고유한 몬스터 위치 기억 맵!
 
-        // ★ [수정 4] 반환된 스레드를 변수에 받아 RunActionLoop 종료 후 join
+        // [수정] 반환된 스레드를 변수에 받아 RunActionLoop 종료 후 join
         auto recv_thread = StartReceiveThread(socket, my_id, my_x, my_y, my_hp, monster_pos_map);
         RunActionLoop(socket, my_x, my_y, my_hp);
 

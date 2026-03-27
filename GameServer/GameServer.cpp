@@ -26,12 +26,6 @@ using boost::asio::ip::tcp;
 
 thread_local dtNavMeshQuery* t_navQuery = nullptr;
 
-// ==========================================
-// Graceful Shutdown을 위한 시그널 핸들러 추가
-//
-// 기존 문제: io_context.run()이 자연 종료만 대기, SIGTERM 무시
-// 수정: Ctrl+C(SIGINT) 수신 시 io_context.stop() → 워커 스레드 종료
-// ==========================================
 static boost::asio::io_context* g_main_io_context = nullptr;
 
 static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
@@ -108,7 +102,6 @@ void StartAIThreadPool(int ai_thread_count) {
 int main() {
     SetConsoleOutputCP(CP_UTF8);
 
-    // 시그널 핸들러 등록
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
     HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\GameServer_Unique_Mutex_Lock");
@@ -124,24 +117,27 @@ int main() {
         return -1;
     }
 
-    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (GameServer는 대용량 서버)
     SendBufferPool::GetInstance().Initialize(PoolConfig::HEAVY_SERVER);
 
-    // raw new → unique_ptr (make_unique 사용)
+    // ==========================================
+    // [에러 복구 개선] DB 연결 실패 시 Degraded Mode로 계속 운영
+    //
+    // 변경 전: DB 연결 실패 -> 서버 즉시 종료
+    // 변경 후: DB 연결 실패 -> 경고 로그 후 DB 없이 서버 계속 가동
+    //   -> 게임 로직(이동, 전투, AI)은 DB 없이도 동작 가능
+    //   -> 로그인/계정 관련 기능만 제한됨
+    // ==========================================
     if (ConfigManager::GetInstance().UseDB()) {
         t_dbManager = std::make_unique<DBManager>();
         if (!t_dbManager->Connect()) {
-            LOG_FATAL("System", "DB 연결에 실패하여 서버를 종료합니다.");
-            return -1;
+            LOG_WARN("System", "DB 연결 실패! Degraded Mode로 서버를 계속 실행합니다. (계정 기능 제한)");
+            t_dbManager.reset();
         }
     }
     else {
         LOG_WARN("System", "config.json 설정에 따라 DB 연동을 건너뜁니다.");
     }
 
-    // =========================================================
-    // ★ [추가] Redis 연결 (config.json의 redis_info 설정에 따라)
-    // =========================================================
     if (ConfigManager::GetInstance().UseRedis()) {
         std::string redis_host = ConfigManager::GetInstance().GetRedisHost();
         int redis_port = ConfigManager::GetInstance().GetRedisPort();
@@ -186,7 +182,6 @@ int main() {
         GameNetworkServer server(ctx.io_context, game_port);
         LOG_INFO("System", "코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young");
 
-        // 시그널 핸들러에서 io_context를 정지시킬 수 있도록 포인터 저장
         g_main_io_context = &ctx.io_context;
 
         ctx.worldConnection = std::make_shared<WorldConnection>(ctx.io_context);
@@ -238,10 +233,8 @@ int main() {
         LOG_FATAL("Error", "예외 발생: " << e.what());
     }
 
-    // ★ Graceful Shutdown
     ctx.Shutdown();
 
-    // ★ [추가] Redis 연결 해제
     if (RedisManager::GetInstance().IsConnected()) {
         RedisManager::GetInstance().Disconnect();
     }

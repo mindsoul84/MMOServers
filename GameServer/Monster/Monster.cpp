@@ -170,7 +170,7 @@ void Monster::UpdateAttack(float delta_time) {
 }
 
 // ==========================================
-// ★ [수정] 길찾기 연산 비동기 처리 (버전 검증으로 Race Condition 방지)
+// [수정] 길찾기 연산 비동기 처리 (버전 검증으로 Race Condition 방지)
 // ==========================================
 void Monster::CalculatePath() {
     if (!navmesh_) return;

@@ -5,7 +5,7 @@
 #include <boost/property_tree/json_parser.hpp>
 
 // ==========================================
-// ★ [수정] 싱글톤 남용 개선: 의존성 주입(DI) 지원
+// [수정] 싱글톤 남용 개선: 의존성 주입(DI) 지원
 //
 // 변경 전: private 생성자 + static Get() → 테스트 불가, 의존성 주입 불가능
 // 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 인스턴스 주입 가능
@@ -47,18 +47,18 @@ private:
     std::string stress_login_server_ip_;
     short stress_login_server_port_   = 0;
 
-    // ★ [수정] inline 정의 사용 (C++17) → 별도 .cpp 파일 불필요
+    // [수정] inline 정의 사용 (C++17) → 별도 .cpp 파일 불필요
     // 각 프로젝트마다 ConfigManager.cpp를 추가할 필요 없이 헤더만으로 링크 완결
     inline static ConfigManager* s_test_instance_ = nullptr;
 
 public:
-    // ★ [수정] private → public 생성자: 테스트에서 직접 인스턴스 생성 가능
+    // [수정] private → public 생성자: 테스트에서 직접 인스턴스 생성 가능
     ConfigManager() = default;
 
     ConfigManager(const ConfigManager&) = delete;
     ConfigManager& operator=(const ConfigManager&) = delete;
 
-    // ★ [수정] 테스트 인스턴스가 주입된 경우 그것을 반환, 아니면 기존 정적 싱글톤 반환
+    // [수정] 테스트 인스턴스가 주입된 경우 그것을 반환, 아니면 기존 정적 싱글톤 반환
     static ConfigManager& GetInstance() {
         if (s_test_instance_) return *s_test_instance_;
         static ConfigManager instance;

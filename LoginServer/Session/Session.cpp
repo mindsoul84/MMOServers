@@ -4,7 +4,7 @@
 
 using boost::asio::ip::tcp;
 
-// ★ [수정 3] heartbeat_timer_를 소켓의 executor에서 생성 (별도 io_context 불필요)
+// [수정] heartbeat_timer_를 소켓의 executor에서 생성 (별도 io_context 불필요)
 Session::Session(tcp::socket socket) noexcept
     : socket_(std::move(socket))
     , heartbeat_timer_(socket_.get_executor())
@@ -13,12 +13,12 @@ Session::Session(tcp::socket socket) noexcept
 
 void Session::start() {
     ReadHeader();
-    // ★ [수정 3] 연결 즉시 하트비트 감시 타이머 시작
+    // [수정] 연결 즉시 하트비트 감시 타이머 시작
     StartHeartbeatCheck();
 }
 
 // ==========================================
-// ★ [수정 3] Heartbeat 타임아웃 체크 구현
+// [수정] Heartbeat 타임아웃 체크 구현
 //
 // HEARTBEAT_CHECK_INTERVAL_SECONDS마다 타이머가 깨어나서
 // 마지막 하트비트로부터 HEARTBEAT_TIMEOUT_SECONDS 초가 넘었으면 연결을 끊습니다.
@@ -76,7 +76,7 @@ void Session::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
         [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t) {
             if (ec) {
-                // ★ [수정 2] 에러 핸들링: 단순 무시 대신 로그 출력
+                // [수정] 에러 핸들링: 단순 무시 대신 로그 출력
                 std::cerr << "[LoginServer] ⚠️ 패킷 전송 실패 (PktID: " << pktId
                     << ", 유저: " << logged_in_id_ << "): " << ec.message() << "\n";
             }
@@ -102,7 +102,7 @@ void Session::ReadHeader() {
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) {
-                    // ★ [수정 2] 에러 핸들링: 잘못된 헤더 크기 로그
+                    // [수정] 에러 핸들링: 잘못된 헤더 크기 로그
                     std::cerr << "[LoginServer] ⚠️ 잘못된 패킷 헤더 크기: " << header_.size
                         << " (유저: " << logged_in_id_ << ")\n";
                     return;
@@ -119,7 +119,7 @@ void Session::ReadHeader() {
                 }
             }
             else {
-                // ★ [수정 2] 에러 핸들링: 단순 OnDisconnected 대신 원인 로그 출력
+                // [수정] 에러 핸들링: 단순 OnDisconnected 대신 원인 로그 출력
                 if (ec != boost::asio::error::eof && ec != boost::asio::error::connection_reset) {
                     std::cerr << "[LoginServer] ReadHeader 오류 (유저: " << logged_in_id_
                         << "): " << ec.message() << "\n";
@@ -139,7 +139,7 @@ void Session::ReadPayload(uint16_t payload_size) {
                 ReadHeader();
             }
             else {
-                // ★ [수정 2] 에러 핸들링: 원인 로그 출력
+                // [수정] 에러 핸들링: 원인 로그 출력
                 if (ec != boost::asio::error::eof && ec != boost::asio::error::connection_reset) {
                     std::cerr << "[LoginServer] ReadPayload 오류 (유저: " << logged_in_id_
                         << "): " << ec.message() << "\n";

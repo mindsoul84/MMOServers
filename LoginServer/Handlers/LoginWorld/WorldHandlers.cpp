@@ -7,7 +7,7 @@
 void Handle_S2SWorldSelectRes(std::shared_ptr<WorldConnection>& world_conn, char* payload, uint16_t payloadSize) {
     Protocol::WorldLoginSelectRes res;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!res.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[LoginServer] 🚨 ParseFromArray 실패: WorldLoginSelectRes (payloadSize=" << payloadSize << ")\n";
         return;

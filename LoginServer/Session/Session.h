@@ -23,7 +23,7 @@ private:
     std::string logged_in_id_ = "";
 
     // ==========================================
-    // ★ [수정 3] Heartbeat 타임아웃 기반 끊김 감지
+    // [수정] Heartbeat 타임아웃 기반 끊김 감지
     //
     // 변경 전: PKT_CLIENT_SERVER_HEARTBEAT 수신은 로그 출력만 하고 끝 → 실질적인 끊김 감지 없음
     // 변경 후: last_heartbeat_ 갱신 + steady_timer로 주기 체크 → 타임아웃 시 강제 연결 종료
@@ -48,7 +48,7 @@ public:
     const std::string& GetLoggedInId() const { return logged_in_id_; }
     void Send(uint16_t pktId, const google::protobuf::Message& msg);
 
-    // ★ [추가 - 수정 3] 하트비트 수신 시 Handle_Heartbeat()에서 호출
+    // ★ [추가 - 수정] 하트비트 수신 시 Handle_Heartbeat()에서 호출
     void UpdateHeartbeat() {
         last_heartbeat_ = std::chrono::steady_clock::now();
     }
@@ -58,6 +58,6 @@ private:
     void ReadHeader();
     void ReadPayload(uint16_t payload_size);
 
-    // ★ [추가 - 수정 3] 타이머 기반 하트비트 타임아웃 체크 시작
+    // ★ [추가 - 수정] 타이머 기반 하트비트 타임아웃 체크 시작
     void StartHeartbeatCheck();
 };

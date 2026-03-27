@@ -27,12 +27,12 @@ class Session;
 class WorldConnection;
 
 // ==========================================
-// ★ [수정 1] LoginContext 싱글톤 → 의존성 주입(DI) 지원
+// [수정] LoginContext 싱글톤 → 의존성 주입(DI) 지원
 //
 // 변경 전: private 생성자 + static Get() → 테스트 불가
 // 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 주입 가능
 //
-// ★ [수정 4] thread::detach 남용 → db_threads_ + Shutdown()으로 안전한 종료
+// [수정] thread::detach 남용 → db_threads_ + Shutdown()으로 안전한 종료
 //   - StartDbThreads()로 등록된 DB 스레드는 Shutdown()에서 join됨
 //   - graceful shutdown: db_io_context.stop() → join
 // ==========================================
@@ -50,29 +50,29 @@ struct LoginContext {
 
     std::shared_ptr<WorldConnection> worldConnection;
 
-    // ★ [추가 - 수정 4] DB 전담 스레드를 detach 대신 여기에 보관 → Shutdown()에서 join
+    // ★ [추가 - 수정] DB 전담 스레드를 detach 대신 여기에 보관 → Shutdown()에서 join
     std::vector<std::thread> db_threads_;
 
-    // ★ [추가 - 수정 4] 정상 종료 신호 플래그
+    // ★ [추가 - 수정] 정상 종료 신호 플래그
     std::atomic<bool> is_running_{ true };
 
-    // ★ [수정 1] 테스트 인스턴스 오버라이드 포인터
-    // ★ [수정] inline 정의 (C++17) → 별도 .cpp 없이 링크 완결
+    // [수정] 테스트 인스턴스 오버라이드 포인터
+    // [수정] inline 정의 (C++17) → 별도 .cpp 없이 링크 완결
     inline static LoginContext* s_test_instance_ = nullptr;
 
-    // ★ [수정 1] 테스트 인스턴스가 주입된 경우 반환, 없으면 정적 싱글톤 반환
+    // [수정] 테스트 인스턴스가 주입된 경우 반환, 없으면 정적 싱글톤 반환
     static LoginContext& Get() {
         if (s_test_instance_) return *s_test_instance_;
         static LoginContext instance;
         return instance;
     }
 
-    // ★ [추가 - 수정 1] 테스트 전용 주입 메서드
+    // ★ [추가 - 수정] 테스트 전용 주입 메서드
     static void SetTestInstance(LoginContext* instance) noexcept {
         s_test_instance_ = instance;
     }
 
-    // ★ [추가 - 수정 4] Graceful Shutdown:
+    // ★ [추가 - 수정] Graceful Shutdown:
     //   1) is_running_ = false 로 루프 종료 신호
     //   2) db_work_guard 해제 + db_io_context 정지 → DB 스레드 종료
     //   3) 모든 db_threads_ join
@@ -87,7 +87,7 @@ struct LoginContext {
         std::cout << "[LoginContext] Shutdown 완료: 모든 DB 스레드 종료됨.\n";
     }
 
-    // ★ [수정 1] public 생성자 → 테스트 코드에서 직접 인스턴스 생성 가능
+    // [수정] public 생성자 → 테스트 코드에서 직접 인스턴스 생성 가능
     LoginContext()
         : db_work_guard(boost::asio::make_work_guard(db_io_context)) {
     }

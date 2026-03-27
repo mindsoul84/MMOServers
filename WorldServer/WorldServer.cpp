@@ -12,13 +12,12 @@
 
 using boost::asio::ip::tcp;
 
-// 전역 실제 메모리 할당 (정의부)
 PacketDispatcher<ServerSession> g_s2s_dispatcher;
 std::vector<std::shared_ptr<ServerSession>> g_serverSessions;
 std::mutex g_serverSessionMutex;
 
 // ==========================================
-// Graceful Shutdown을 위한 시그널 핸들러 추가
+// Graceful Shutdown
 // ==========================================
 static boost::asio::io_context* g_main_io_context_world = nullptr;
 
@@ -34,46 +33,76 @@ static BOOL WINAPI WorldConsoleCtrlHandler(DWORD ctrlType) {
 }
 
 // ==========================================
-// ServerSession 클래스 구현부
+// ServerSession 구현부
 // ==========================================
-ServerSession::ServerSession(tcp::socket socket) noexcept : socket_(std::move(socket)) {}
+ServerSession::ServerSession(tcp::socket socket) noexcept
+    : socket_(std::move(socket))
+    , strand_(static_cast<boost::asio::io_context&>(socket_.get_executor().context()))
+{}
 
 void ServerSession::start() {
     ReadHeader();
 }
 
+// ==========================================
+// Send() - strand + send_queue 패턴 적용 (전 세션 일관성 확보)
+//
+// 변경 전: async_write를 strand 없이 직접 호출
+//   -> LoginServer/GameServer 등 여러 서버가 동시에 Send() 호출 시
+//      같은 소켓에 concurrent async_write 발생 -> TCP 스트림 오염
+//
+// 변경 후: strand_ 내부에서 큐에 쌓고 DoWrite()로 순차 전송
+//   -> GatewaySession, ClientSession, GameConnection과 동일한 패턴
+// ==========================================
 void ServerSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) {
         LOG_WARN("WorldServer", "Send 시도했으나 소켓이 이미 닫혀있음 (PktID: " << pktId << ")");
         return;
     }
 
-    std::string payload;
-    msg.SerializeToString(&payload);
-    PacketHeader header;
-    header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
-    header.id = pktId;
+    uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
+    uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
-    // ★ [수정] 풀에서 대여한 버퍼 사용 (MAX_PACKET_SIZE=4096 기준)
+    if (totalSize > MAX_PACKET_SIZE) {
+        LOG_ERROR("WorldServer", "패킷 크기 초과! (PktID: " << pktId << ", Size: " << totalSize << " bytes) - 전송 취소");
+        return;
+    }
+
     SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
     std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
+    PacketHeader header{ totalSize, pktId };
     memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
-    memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
+    msg.SerializeToArray(send_buf->buffer_.data() + sizeof(PacketHeader), payloadSize);
 
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t bytes_sent) {
-            if (ec) {
-                auto result = NetworkUtils::HandleError(
-                    "ServerSession::Send(PktID:" + std::to_string(pktId) + ")", 
-                    ec
-                );
-                if (result.should_disconnect) {
-                    LOG_ERROR("WorldServer", "S2S 패킷 전송 실패로 연결 종료 예정");
+    boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
+        bool write_in_progress = !send_queue_.empty();
+        send_queue_.emplace_back(send_buf, static_cast<size_t>(totalSize));
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
+}
+
+void ServerSession::DoWrite() {
+    auto self(shared_from_this());
+    auto& front_msg = send_queue_.front();
+
+    boost::asio::async_write(socket_,
+        boost::asio::buffer(front_msg.first->buffer_.data(), front_msg.second),
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec) {
+                send_queue_.pop_front();
+                if (!send_queue_.empty()) {
+                    DoWrite();
                 }
             }
-        });
+            else {
+                LOG_ERROR("WorldServer", "S2S 패킷 전송 실패 (DoWrite): " << ec.message());
+                send_queue_.clear();
+            }
+        }));
 }
 
 void ServerSession::ReadHeader() {
@@ -81,7 +110,6 @@ void ServerSession::ReadHeader() {
     boost::asio::async_read(socket_, boost::asio::buffer(&header_, sizeof(PacketHeader)),
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
-                // 헤더 검증 일관성 강화
                 if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) {
                     LOG_WARN("WorldServer", "잘못된 패킷 헤더 크기: " << header_.size);
                     return;
@@ -183,7 +211,6 @@ int main() {
         
     SetConsoleOutputCP(CP_UTF8);
 
-    // 시그널 핸들러 등록
     SetConsoleCtrlHandler(WorldConsoleCtrlHandler, TRUE);
 
     HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\WorldServer_Unique_Mutex_Lock");
@@ -200,7 +227,6 @@ int main() {
         return -1;
     }
 
-    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (WorldServer는 경량 서버)
     SendBufferPool::GetInstance().Initialize(PoolConfig::LIGHT_SERVER);
 
     g_s2s_dispatcher.RegisterHandler(Protocol::PKT_LOGIN_WORLD_SELECT_REQ, Handle_WorldLoginSelectReq);
@@ -208,7 +234,6 @@ int main() {
     try {
         boost::asio::io_context io_context;
 
-        // 시그널 핸들러용 포인터 저장
         g_main_io_context_world = &io_context;
 
         short port = ConfigManager::GetInstance().GetWorldServerPort();
@@ -216,7 +241,6 @@ int main() {
         WorldServer server(io_context, port);
         LOG_INFO("WorldServer", "월드 중앙 서버 가동 시작 (Port: " << port << ") Created by Jeong Shin Young");
 
-        // ★ gRPC 스레드 (join으로 정리)
         std::thread grpc_thread(RunGrpcServer);
 
         io_context.run();

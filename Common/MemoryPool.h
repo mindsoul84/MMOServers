@@ -5,7 +5,7 @@
 #include <boost/lockfree/queue.hpp>
 
 // ==========================================
-// ★ [수정] 메모리 풀 설정값 현실화
+// [수정] 메모리 풀 설정값 현실화
 //
 // 변경 전: MAX_PACKET_SIZE=65535, BUFFER_SIZE=10000
 //   → 65535 × 10000 = 약 655MB 사전 할당 (LoginServer/WorldServer 600MB+ 점유 원인)
@@ -45,7 +45,7 @@ private:
     boost::lockfree::queue<SendBuffer*> pool_;
     bool initialized_ = false;
 
-    // ★ [수정] 생성자에서 사전 할당 제거 → Initialize()로 이관
+    // [수정] 생성자에서 사전 할당 제거 → Initialize()로 이관
     SendBufferPool() : pool_(128) {}
 
 public:

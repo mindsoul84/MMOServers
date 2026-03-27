@@ -10,7 +10,7 @@
 void Handle_GatewayConnectReq(std::shared_ptr<ClientSession>& session, char* payload, uint16_t payloadSize) {
     Protocol::GatewayConnectReq req;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!req.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: GatewayConnectReq (payloadSize=" << payloadSize << ")\n";
         return;
@@ -33,7 +33,7 @@ void Handle_GatewayConnectReq(std::shared_ptr<ClientSession>& session, char* pay
 void Handle_ChatReq(std::shared_ptr<ClientSession>& session, char* payload, uint16_t payloadSize) {
     Protocol::ChatReq req;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!req.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: ChatReq (payloadSize=" << payloadSize << ")\n";
         return;
@@ -55,7 +55,7 @@ void Handle_ChatReq(std::shared_ptr<ClientSession>& session, char* payload, uint
 void Handle_MoveReq(std::shared_ptr<ClientSession>& session, char* payload, uint16_t payloadSize) {
     Protocol::MoveReq req;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!req.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: MoveReq (payloadSize=" << payloadSize << ")\n";
         return;
@@ -76,7 +76,7 @@ void Handle_MoveReq(std::shared_ptr<ClientSession>& session, char* payload, uint
 void Handle_AttackReq(std::shared_ptr<ClientSession>& session, char* payload, uint16_t payloadSize) {
     Protocol::AttackReq req;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!req.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: AttackReq (payloadSize=" << payloadSize << ")\n";
         return;

@@ -10,7 +10,7 @@
 void Handle_MoveRes_FromGame(std::shared_ptr<GameConnection>& conn, char* payload, uint16_t payloadSize) {
     Protocol::GameGatewayMoveRes s2s_res;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!s2s_res.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: GameGatewayMoveRes (payloadSize=" << payloadSize << ")\n";
         return;
@@ -36,7 +36,7 @@ void Handle_MoveRes_FromGame(std::shared_ptr<GameConnection>& conn, char* payloa
 void Handle_GameGatewayAttackRes(std::shared_ptr<GameConnection>& session, char* payload, uint16_t size) {
     Protocol::GameGatewayAttackRes s2s_res;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!s2s_res.ParseFromArray(payload, size)) {
         std::cerr << "[Gateway] 🚨 ParseFromArray 실패: GameGatewayAttackRes (payloadSize=" << size << ")\n";
         return;

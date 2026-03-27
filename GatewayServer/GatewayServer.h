@@ -20,7 +20,7 @@ class GameConnection;
 class ClientSession;
 
 // ==========================================
-// ★ [수정 1] GatewayContext 싱글톤 → 의존성 주입(DI) 지원
+// [수정] GatewayContext 싱글톤 → 의존성 주입(DI) 지원
 //
 // 변경 전: private 생성자 + static Get() → 테스트 불가
 // 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 주입 가능
@@ -40,23 +40,23 @@ struct GatewayContext {
     std::unordered_map<std::string, std::shared_ptr<ClientSession>> clientMap;
     std::mutex clientMutex;
 
-    // ★ [수정 1] 테스트 인스턴스 오버라이드 포인터
-    // ★ [수정] inline 정의 (C++17) → 별도 .cpp 없이 링크 완결
+    // [수정] 테스트 인스턴스 오버라이드 포인터
+    // [수정] inline 정의 (C++17) → 별도 .cpp 없이 링크 완결
     inline static GatewayContext* s_test_instance_ = nullptr;
 
-    // ★ [수정 1] 테스트 인스턴스가 주입된 경우 반환, 없으면 정적 싱글톤 반환
+    // [수정] 테스트 인스턴스가 주입된 경우 반환, 없으면 정적 싱글톤 반환
     static GatewayContext& Get() {
         if (s_test_instance_) return *s_test_instance_;
         static GatewayContext instance;
         return instance;
     }
 
-    // ★ [추가 - 수정 1] 테스트 전용 주입 메서드
+    // ★ [추가 - 수정] 테스트 전용 주입 메서드
     static void SetTestInstance(GatewayContext* instance) noexcept {
         s_test_instance_ = instance;
     }
 
-    // ★ [수정 1] public 생성자 → 테스트 코드에서 직접 인스턴스 생성 가능
+    // [수정] public 생성자 → 테스트 코드에서 직접 인스턴스 생성 가능
     GatewayContext() = default;
 
     GatewayContext(const GatewayContext&) = delete;

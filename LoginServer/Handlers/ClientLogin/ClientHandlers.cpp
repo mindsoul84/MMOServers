@@ -11,7 +11,7 @@
 void Handle_LoginReq(std::shared_ptr<Session>& session, char* payload, uint16_t payloadSize) {
     auto login_req = std::make_shared<Protocol::LoginReq>();
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력 후 반환
+    // [수정] ParseFromArray 실패 시 로그 출력 후 반환
     if (!login_req->ParseFromArray(payload, payloadSize)) {
         std::cerr << "[LoginServer] 🚨 ParseFromArray 실패: LoginReq (payloadSize=" << payloadSize << ")\n";
         return;
@@ -78,13 +78,13 @@ void Handle_LoginReq(std::shared_ptr<Session>& session, char* payload, uint16_t 
 void Handle_Heartbeat(std::shared_ptr<Session>& session, char* payload, uint16_t payloadSize) {
     Protocol::Heartbeat hb;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!hb.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[LoginServer] 🚨 ParseFromArray 실패: Heartbeat (payloadSize=" << payloadSize << ")\n";
         return;
     }
 
-    // ★ [수정 3] Heartbeat 수신 시 타임스탬프 갱신 (타임아웃 카운터 리셋)
+    // [수정] Heartbeat 수신 시 타임스탬프 갱신 (타임아웃 카운터 리셋)
     session->UpdateHeartbeat();
 
     std::cout << "[패킷수신] PKT_HEARTBEAT - 클라이언트(" << session->GetLoggedInId() << ") 생존 확인!\n";
@@ -93,7 +93,7 @@ void Handle_Heartbeat(std::shared_ptr<Session>& session, char* payload, uint16_t
 void Handle_WorldSelectReq(std::shared_ptr<Session>& session, char* payload, uint16_t payloadSize) {
     Protocol::WorldSelectReq req;
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // [수정] ParseFromArray 실패 시 로그 출력
     if (!req.ParseFromArray(payload, payloadSize)) {
         std::cerr << "[LoginServer] 🚨 ParseFromArray 실패: WorldSelectReq (payloadSize=" << payloadSize << ")\n";
         return;

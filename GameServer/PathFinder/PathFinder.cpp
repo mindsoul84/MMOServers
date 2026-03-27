@@ -40,7 +40,7 @@ NavMesh::~NavMesh() {
 }
 
 // ==========================================
-// ★ [수정] 진짜 .bin 파일을 읽어 메모리에 할당하는 함수
+// [수정] 진짜 .bin 파일을 읽어 메모리에 할당하는 함수
 // ==========================================
 bool NavMesh::LoadNavMeshFromFile(const char* filepath) {
     std::ifstream file(filepath, std::ios::binary);

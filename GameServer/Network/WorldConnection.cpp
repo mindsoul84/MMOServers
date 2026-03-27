@@ -102,7 +102,7 @@ void WorldConnection::ReadHeader() {
 
                 if (current_payload_size_ == 0) {
                     auto session_ptr = self;
-                    // ★ [수정] GameContext의 월드 디스패처 사용
+                    // [수정] GameContext의 월드 디스패처 사용
                     GameContext::Get().worldDispatcher.Dispatch(session_ptr, current_header_id_, nullptr, 0);
                     ReadHeader();
                 }
@@ -123,7 +123,7 @@ void WorldConnection::ReadPayload() {
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 auto session_ptr = self;
-                // ★ [수정] GameContext의 월드 디스패처 사용
+                // [수정] GameContext의 월드 디스패처 사용
                 GameContext::Get().worldDispatcher.Dispatch(session_ptr, current_header_id_, payload_buf_.data(), current_payload_size_);
                 ReadHeader();
             }

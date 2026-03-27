@@ -10,7 +10,7 @@
 void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::WorldGameMonsterBuffReq>();
 
-    // ★ [수정 2] ParseFromArray 실패 시 로그 출력
+    // ParseFromArray 실패 시 로그 출력
     if (!req->ParseFromArray(payload, payloadSize)) {
         std::cerr << "[GameServer] 🚨 ParseFromArray 실패: WorldGameMonsterBuffReq (payloadSize=" << payloadSize << ")\n";
         return;
@@ -18,7 +18,8 @@ void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char
 
     auto& ctx = GameContext::Get();
 
-    std::unique_lock<std::shared_mutex> lock(ctx.gameStateMutex);
+    // monsterMutex_ 쓰기 락: 몬스터 체력 변경
+    std::unique_lock<std::shared_mutex> lock(ctx.monsterMutex_);
 
     uint64_t min_uid = req->min_uid();
     uint64_t max_uid = req->max_uid();

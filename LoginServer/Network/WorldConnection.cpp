@@ -1,4 +1,5 @@
 ﻿#include "WorldConnection.h"
+#include "../../Common/Utils/Logger.h"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -6,31 +7,84 @@ using boost::asio::ip::tcp;
 WorldConnection::WorldConnection(boost::asio::io_context& io_context)
     : socket_(io_context)
     , io_context_(io_context)
-    , strand_(io_context)   // ★ [버그 픽스] strand_ 초기화
+    , strand_(io_context)
+    , retry_timer_(io_context)
 {}
 
+// ==========================================
+// [에러 복구] 동기 -> 비동기 연결로 전환
+//
+// 변경 전: boost::asio::connect() 동기 호출
+//   -> WorldServer가 꺼져 있으면 LoginServer도 즉시 예외로 종료
+//
+// 변경 후: async_connect + ScheduleRetry 패턴
+//   -> WorldServer 부재 시 3초 간격으로 재연결 시도
+//   -> LoginServer는 WorldServer 없이도 기동 가능 (월드 선택만 불가)
+// ==========================================
 void WorldConnection::Connect(const std::string& ip, short port) {
-    tcp::resolver resolver(io_context_);
-    auto endpoints = resolver.resolve(ip, std::to_string(port));
-    boost::asio::connect(socket_, endpoints);
-
-    try {
-        unsigned short my_port = socket_.local_endpoint().port();
-        std::cout << "[LoginServer] 🌐 WorldServer(S2S)에 성공적으로 연결되었습니다! (부여 포트: " << my_port << ")\n";
-    }
-    catch (...) {
-        std::cout << "[LoginServer] 🌐 WorldServer(S2S)에 성공적으로 연결되었습니다!\n";
-    }
-    ReadHeader();
+    target_ip_ = ip;
+    target_port_ = port;
+    DoConnect();
 }
 
-// ==========================================
-// ★ [버그 픽스] Send() - strand + send_queue 패턴 적용
-//
-// 변경 전: async_write 직접 호출 → 동시 Send() 시 소켓 오염 가능
-// 변경 후: strand_에 post → DoWrite()로 순차 전송
-// ==========================================
+void WorldConnection::DoConnect() {
+    try {
+        tcp::resolver resolver(io_context_);
+        auto endpoints = resolver.resolve(target_ip_, std::to_string(target_port_));
+
+        auto self(shared_from_this());
+        boost::asio::async_connect(socket_, endpoints,
+            [this, self](boost::system::error_code ec, tcp::endpoint) {
+                if (!ec) {
+                    connected_ = true;
+                    try {
+                        unsigned short my_port = socket_.local_endpoint().port();
+                        LOG_INFO("LoginServer", "WorldServer(S2S)에 성공적으로 연결되었습니다! (부여 포트: " << my_port << ")");
+                    }
+                    catch (...) {
+                        LOG_INFO("LoginServer", "WorldServer(S2S)에 성공적으로 연결되었습니다!");
+                    }
+                    ReadHeader();
+                }
+                else {
+                    LOG_WARN("LoginServer", "WorldServer 연결 실패. 3초 후 재연결 시도...");
+                    ScheduleRetry();
+                }
+            });
+    }
+    catch (std::exception& e) {
+        LOG_ERROR("LoginServer", "WorldServer 주소 변환 에러: " << e.what());
+        ScheduleRetry();
+    }
+}
+
+void WorldConnection::ScheduleRetry() {
+    connected_ = false;
+
+    // 재연결 전 send_queue 초기화 (이전 연결의 잔여 패킷 제거)
+    boost::asio::post(strand_, [this]() { send_queue_.clear(); });
+
+    if (socket_.is_open()) {
+        boost::system::error_code ec;
+        socket_.close(ec);
+    }
+
+    auto self(shared_from_this());
+    retry_timer_.expires_after(std::chrono::seconds(3));
+    retry_timer_.async_wait([this, self](boost::system::error_code ec) {
+        if (!ec) {
+            LOG_INFO("LoginServer", "WorldServer 재연결 시도 중...");
+            DoConnect();
+        }
+    });
+}
+
 void WorldConnection::Send(uint16_t pktId, const google::protobuf::Message& msg) {
+    if (!connected_ || !socket_.is_open()) {
+        LOG_WARN("LoginServer", "WorldServer 미연결 상태에서 Send 시도 (PktID: " << pktId << ") - 패킷 드랍");
+        return;
+    }
+
     std::string payload;
     msg.SerializeToString(&payload);
     PacketHeader header;
@@ -63,8 +117,9 @@ void WorldConnection::DoWrite() {
                 if (!send_queue_.empty()) DoWrite();
             }
             else {
-                std::cerr << "[LoginServer] WorldServer로 패킷 전송 실패 (DoWrite): " << ec.message() << "\n";
+                LOG_ERROR("LoginServer", "WorldServer로 패킷 전송 실패 (DoWrite): " << ec.message());
                 send_queue_.clear();
+                ScheduleRetry();
             }
         }));
 }
@@ -86,7 +141,8 @@ void WorldConnection::ReadHeader() {
                 }
             }
             else {
-                std::cerr << "[LoginServer] 🚨 WorldServer와의 연결이 끊어졌습니다!\n";
+                LOG_WARN("LoginServer", "WorldServer와의 연결이 끊어졌습니다! 재연결 시도...");
+                ScheduleRetry();
             }
         });
 }
@@ -101,7 +157,8 @@ void WorldConnection::ReadPayload(uint16_t payload_size) {
                 ReadHeader();
             }
             else {
-                std::cerr << "[LoginServer] 🚨 WorldServer와의 연결이 끊어졌습니다!\n";
+                LOG_WARN("LoginServer", "WorldServer와의 연결이 끊어졌습니다! 재연결 시도...");
+                ScheduleRetry();
             }
         });
 }

@@ -3,34 +3,38 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <deque>   // [BUG FIX] send queue
-#include <utility> // [BUG FIX] std::pair
+#include <deque>
+#include <utility>
 #include <google/protobuf/message.h>
 #include "..\GatewayServer.h"
+#include "..\..\Common\PacketDispatcher.h"
 
-struct SendBuffer; // forward declaration
+struct SendBuffer;
 
 // ==========================================
-// [BUG FIX] strand + send_queue 추가
+// [패킷 파이프라인 강화] Rate Limiter 추가
 //
-// 변경 전: async_write를 strand 없이 직접 호출
-//   -> 멀티스레드 환경에서 동일 소켓에 동시 쓰기 시 TCP 스트림 interleave (패킷 깨짐)
-// 변경 후: GatewaySession과 동일한 strand + deque 패턴 적용
-//   -> 모든 Send()가 strand_ 내부에서 직렬화되어 안전하게 전송됨
+// 변경 전: 클라이언트가 보내는 패킷 수에 제한 없음
+//   -> 악의적 클라이언트가 초당 수만 패킷 전송 시 서버 자원 고갈
+//
+// 변경 후: PacketRateLimiter로 초당 패킷 수 제한
+//   -> 초과 시 패킷 드랍 + 경고 로그
+//   -> 반복 초과 시 연결 강제 종료 가능 (violation_count_ 추적)
 // ==========================================
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
 private:
     boost::asio::ip::tcp::socket socket_;
-
-    // [BUG FIX] 이 세션 전용 strand (동시 async_write 방지)
     boost::asio::io_context::strand strand_;
-
-    // [BUG FIX] 패킷 전송 대기열 (버퍼 포인터 + 실제 전송 크기)
     std::deque<std::pair<std::shared_ptr<SendBuffer>, size_t>> send_queue_;
 
     PacketHeader header_;
     std::vector<char> payload_buf_;
     std::string account_id_ = "";
+
+    // [패킷 파이프라인] 세션별 Rate Limiter
+    PacketRateLimiter rate_limiter_;
+    int rate_violation_count_ = 0;          // 연속 초과 횟수
+    static constexpr int MAX_VIOLATIONS = 5; // 이 횟수 초과 시 강제 연결 종료
 
 public:
     ClientSession(boost::asio::ip::tcp::socket socket) noexcept;
@@ -43,7 +47,5 @@ public:
 private:
     void ReadHeader();
     void ReadPayload(uint16_t payload_size);
-
-    // [BUG FIX] 큐에서 패킷을 꺼내 실제로 전송하는 내부 함수
     void DoWrite();
 };

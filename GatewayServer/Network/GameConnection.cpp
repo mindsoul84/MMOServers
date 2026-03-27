@@ -134,7 +134,7 @@ void GameConnection::ReadHeader() {
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
                 if (payload_size == 0) {
                     auto session_ptr = self;
-                    // ★ [수정] g_game_dispatcher → GatewayContext::Get().gameDispatcher
+                    // [수정] g_game_dispatcher → GatewayContext::Get().gameDispatcher
                     GatewayContext::Get().gameDispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
                     ReadHeader();
                 }
@@ -156,7 +156,7 @@ void GameConnection::ReadPayload(uint16_t payload_size) {
         [this, self, payload_size](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
                 auto session_ptr = self;
-                // ★ [수정] g_game_dispatcher → GatewayContext::Get().gameDispatcher
+                // [수정] g_game_dispatcher → GatewayContext::Get().gameDispatcher
                 GatewayContext::Get().gameDispatcher.Dispatch(session_ptr, header_.id, payload_buf_.data(), payload_size);
                 ReadHeader();
             }
