@@ -22,16 +22,13 @@ void ClientSession::SetAccountId(const std::string& id) { account_id_ = id; }
 const std::string& ClientSession::GetAccountId() const { return account_id_; }
 
 // ==========================================
-// [BUG FIX] Send() 전면 재작성 - strand + send_queue 패턴 적용
+// ★ [수정] Send() - 메모리 풀 활용으로 통일
 //
-// 변경 전:
-//   boost::asio::async_write(socket_, ...) 를 strand 없이 직접 호출
-//   -> 여러 스레드에서 동시에 같은 ClientSession에 Send 호출 시
-//      TCP 스트림이 interleave되어 패킷이 깨짐
+// 변경 전: make_shared<SendBuffer>(totalSize) → 매번 힙 할당
+//   → 대규모 동접 시 new/delete가 초당 수만 회 발생하여 힙 할당자 병목 유발
 //
-// 변경 후:
-//   boost::asio::post(strand_, ...) 로 큐에 쌓은 뒤 DoWrite()로 순차 전송
-//   -> GatewaySession과 동일한 패턴으로 스레드 안전성 확보
+// 변경 후: SendBufferPool에서 대여 → 전송 완료 시 자동 반납 (SendBufferDeleter)
+//   → Lock-Free 풀에서 O(1)로 버퍼 획득, 힙 할당 비용 사실상 0
 // ==========================================
 void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) {
@@ -48,8 +45,9 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
         return;
     }
 
-    // [BUG FIX] 가변 크기 SendBuffer 사용 (부하테스트 모드)
-    auto send_buf = std::make_shared<SendBuffer>(totalSize);
+    // ★ [수정] 메모리 풀에서 버퍼 대여 (전송 완료 시 SendBufferDeleter가 자동 반납)
+    SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
+    std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
     PacketHeader header{ totalSize, pktId };
     memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
@@ -74,7 +72,7 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
 }
 
 // ==========================================
-// [BUG FIX] 실제 비동기 전송을 수행하는 함수 (신규 추가)
+// [BUG FIX] 실제 비동기 전송을 수행하는 함수
 //
 // strand_ 내부에서만 호출되며, 큐의 맨 앞 패킷부터 순차적으로 전송합니다.
 // 전송 완료 콜백도 bind_executor(strand_)로 보호하여 스레드 안전성을 확보합니다.
@@ -109,14 +107,12 @@ void ClientSession::OnDisconnected() {
     if (!account_id_.empty()) {
         auto& ctx = GatewayContext::Get();
 
-        // ★ [수정] g_gameConnection → ctx.gameConnection
         if (ctx.gameConnection) {
             Protocol::GatewayGameLeaveReq leave_req;
             leave_req.set_account_id(account_id_);
             ctx.gameConnection->Send(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ, leave_req);
         }
 
-        // ★ [수정] g_clientMutex, g_clientMap → ctx.clientMutex, ctx.clientMap
         std::lock_guard<std::mutex> lock(ctx.clientMutex);
         ctx.clientMap.erase(account_id_);
         std::cout << "[Gateway] 유저 접속 종료 및 맵에서 삭제됨: " << account_id_ << "\n";
@@ -136,7 +132,6 @@ void ClientSession::ReadHeader() {
                 uint16_t payload_size = static_cast<uint16_t>(header_.size - sizeof(PacketHeader));
                 if (payload_size == 0) {
                     auto session_ptr = self;
-                    // ★ [수정] g_gateway_dispatcher → GatewayContext::Get().clientDispatcher
                     GatewayContext::Get().clientDispatcher.Dispatch(session_ptr, header_.id, nullptr, 0);
                     ReadHeader();
                 }

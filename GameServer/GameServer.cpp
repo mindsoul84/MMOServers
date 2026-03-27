@@ -9,6 +9,7 @@
 #include "../Common/DataManager/DataManager.h"
 #include "../Common/Utils/Logger.h"
 #include "../Common/Redis/RedisManager.h"
+#include "../Common/MemoryPool.h"
 #include "Pathfinder/MapGenerator.h"
 #include "Monster/MonsterManager.h"
 
@@ -122,6 +123,9 @@ int main() {
         system("pause");
         return -1;
     }
+
+    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (GameServer는 대용량 서버)
+    SendBufferPool::GetInstance().Initialize(PoolConfig::HEAVY_SERVER);
 
     // raw new → unique_ptr (make_unique 사용)
     if (ConfigManager::GetInstance().UseDB()) {

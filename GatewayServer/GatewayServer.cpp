@@ -4,6 +4,7 @@
 #include "Handlers/ClientGateway/ClientHandlers.h"
 #include "Handlers/GameGateway/GameHandlers.h"
 #include "../Common/ConfigManager.h"
+#include "../Common/MemoryPool.h"
 
 #include <iostream>
 #include <windows.h>
@@ -45,6 +46,9 @@ int main() {
         system("pause");
         return -1;
     }
+
+    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (GatewayServer는 대용량 서버)
+    SendBufferPool::GetInstance().Initialize(PoolConfig::HEAVY_SERVER);
 
     auto& ctx = GatewayContext::Get();
 

@@ -74,6 +74,9 @@ int main() {
         return -1;
     }
 
+    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (LoginServer는 경량 서버)
+    SendBufferPool::GetInstance().Initialize(PoolConfig::LIGHT_SERVER);
+
     auto& ctx = LoginContext::Get();
 
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_LOGIN_REQ,        Handle_LoginReq);

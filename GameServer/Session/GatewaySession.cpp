@@ -12,12 +12,19 @@ void GatewaySession::start() {
     ReadHeader();
 }
 
+// ==========================================
+// ★ [수정] Send() - 메모리 풀 활용으로 통일
+//
+// 변경 전: make_shared<SendBuffer>(totalSize) → 매번 힙 할당
+//   → 대규모 동접 시 new/delete가 초당 수만 회 발생하여 힙 할당자 병목 유발
+//
+// 변경 후: SendBufferPool에서 대여 → 전송 완료 시 자동 반납 (SendBufferDeleter)
+//   → Lock-Free 풀에서 O(1)로 버퍼 획득, 힙 할당 비용 사실상 0
+//   → LoginServer, WorldServer, GatewayServer의 모든 Send 경로가 동일한 풀 패턴 사용
+// ==========================================
 void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
 
-    // =========================================================
-    // 🚀 [부하 테스트 전용 모드] 메모리 폭발 방지를 위한 가변 크기 버퍼
-    // =========================================================
     uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
     uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
@@ -28,8 +35,9 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
         return;
     }
 
-    // ★ 핵심: MemoryPool을 거치지 않고, 가변 길이 생성자(exact_size)를 사용하여 딱 필요한 만큼만 할당!
-    auto send_buf = std::make_shared<SendBuffer>(totalSize);
+    // ★ [수정] 메모리 풀에서 버퍼 대여 (전송 완료 시 SendBufferDeleter가 자동 반납)
+    SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
+    std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
     PacketHeader header{ totalSize, pktId };
     memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));

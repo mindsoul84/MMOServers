@@ -1,0 +1,80 @@
+﻿[v1.0.6 수정 요약]
+ㆍ메모리 크기 버그 수정 (LoginServer/WorldServer 600MB+ 점유 문제)
+ㆍ메모리 풀 설정값 현실화 및 서버 역할별 차등 적용
+ㆍGameServer/GatewayServer Send 경로를 메모리 풀로 통일 (대규모 동접 성능 최적화)
+
+================================================================================
+1. 버그 수정 — LoginServer/WorldServer 600MB+ 메모리 점유
+================================================================================
+
+■ 원인 분석
+
+  MemoryPool.h의 SendBufferPool 싱글톤이 생성자에서 사전 할당:
+    MAX_PACKET_SIZE(65535) × BUFFER_SIZE(10000) = 약 655MB
+
+  LoginServer의 Session::Send()와 WorldServer의 ServerSession::Send()가
+  SendBufferPool::GetInstance().Acquire()를 호출 → 싱글톤 초기화 촉발 → 655MB 즉시 할당
+
+  반면 GameServer(GatewaySession)와 GatewayServer(ClientSession)는
+  make_shared<SendBuffer>(totalSize)로 풀을 우회하고 있어서 메모리풀 할당하지 않았음
+
+  결론: 풀 구조 자체는 올바르나, 설정값이 과도했고 초기화 방식이 문제였음
+
+■ 수정 내용
+
+  [1] MAX_PACKET_SIZE: 65535 → 4096
+      실제 게임 패킷은 대부분 수백 바이트 이내이며, 가장 큰 패킷(GameGatewayMoveRes + 
+      20개 AOI account_id)도 1KB 미만. 4096이면 모든 패킷을 충분히 수용함.
+
+  [2] 풀 초기화 방식: 생성자 사전 할당 → Initialize() 지연 초기화(Lazy Init) 방식으로 변경
+      - 싱글톤 접근만으로 메모리가 할당되는 문제 완전 제거
+      - 각 서버의 main()에서 역할에 맞는 크기로 명시적 초기화
+
+  [3] 서버 역할별 풀 크기 차등 적용:
+      - GameServer/GatewayServer (PoolConfig::HEAVY_SERVER = 10,000개)
+        → 10,000 × 4KB = 약 40MB (AOI 브로드캐스트 대응)
+      - LoginServer/WorldServer (PoolConfig::LIGHT_SERVER = 1,000개)
+        → 1,000 × 4KB = 약 4MB (S2S 통신 위주, 동시 전송량 적음)
+
+  메모리 사용량 변화:
+    LoginServer: ~655MB → ~4MB  (99.4% 절감)
+    WorldServer: ~655MB → ~4MB  (99.4% 절감)
+    GameServer:  변화 없음 (기존에 풀 미사용 → 이제 40MB 풀 사용)
+    GatewayServer: 변화 없음 (기존에 풀 미사용 → 이제 40MB 풀 사용)
+
+================================================================================
+2. 성능 개선 — GameServer/GatewayServer Send 경로 메모리 풀 통일
+================================================================================
+
+■ 변경 전 문제
+
+  GameServer의 GatewaySession::Send()와 GatewayServer의 ClientSession::Send()가
+  make_shared<SendBuffer>(totalSize)로 매번 힙 할당 수행
+  → 동접 3,000명이 각각 초당 수 회 패킷 전송 시 new/delete 초당 수만~수십만 회 발생
+  → 힙 할당자 내부 락 경합 + 메모리 단편화 축적 → 장기 운영 시 점진적 성능 저하
+
+■ 변경 후
+
+  모든 서버의 Send() 경로를 SendBufferPool 기반으로 통일:
+  - SendBufferPool::GetInstance().Acquire() → Lock-Free O(1) 버퍼 획득
+  - SendBufferDeleter → shared_ptr 소멸 시 자동으로 풀에 반납 (delete 대신)
+  - 런타임 힙 할당 비용이 사실상 0으로 감소
+
+  이는 이 프로젝트가 지향하는 MMORPG 대규모 동시접속 서버의 성능 목표에 부합하는
+  실무 표준 메모리 풀 패턴입니다.
+
+================================================================================
+수정 파일 목록
+================================================================================
+
+[수정]
+  Common/MemoryPool.h                       — MAX_PACKET_SIZE=4096, 지연 초기화, 역할별 풀 크기 상수
+  LoginServer/LoginServer.cpp               — SendBufferPool::Initialize(LIGHT_SERVER) 호출 추가
+  WorldServer/WorldServer.cpp               — SendBufferPool::Initialize(LIGHT_SERVER) 호출 추가
+  GameServer/GameServer.cpp                 — SendBufferPool::Initialize(HEAVY_SERVER) 호출 추가
+  GatewayServer/GatewayServer.cpp           — SendBufferPool::Initialize(HEAVY_SERVER) 호출 추가
+  GameServer/Session/GatewaySession.cpp     — make_shared → 메모리 풀 사용으로 변경
+  GatewayServer/Session/ClientSession.cpp   — make_shared → 메모리 풀 사용으로 변경
+
+[신규]
+  ReleaseNotes/v1.0.6.txt                   — 이 파일

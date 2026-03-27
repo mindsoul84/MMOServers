@@ -54,6 +54,7 @@ void ServerSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
     header.id = pktId;
 
+    // ★ [수정] 풀에서 대여한 버퍼 사용 (MAX_PACKET_SIZE=4096 기준)
     SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
     std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
@@ -198,6 +199,9 @@ int main() {
         system("pause");
         return -1;
     }
+
+    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (WorldServer는 경량 서버)
+    SendBufferPool::GetInstance().Initialize(PoolConfig::LIGHT_SERVER);
 
     g_s2s_dispatcher.RegisterHandler(Protocol::PKT_LOGIN_WORLD_SELECT_REQ, Handle_WorldLoginSelectReq);
 
