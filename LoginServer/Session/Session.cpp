@@ -51,7 +51,6 @@ void Session::StartHeartbeatCheck() {
 void Session::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
 
-#ifdef  DEF_STRESS_TEST_TOOL
     uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
     uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
@@ -60,7 +59,6 @@ void Session::Send(uint16_t pktId, const google::protobuf::Message& msg) {
             << ", Size: " << totalSize << " bytes) - 전송 취소\n";
         return;
     }
-#endif
 
     std::string payload;
     msg.SerializeToString(&payload);

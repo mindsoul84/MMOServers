@@ -15,7 +15,6 @@ void GatewaySession::start() {
 void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
 
-#ifdef  DEF_STRESS_TEST_TOOL
     // =========================================================
     // 🚀 [부하 테스트 전용 모드] 메모리 폭발 방지를 위한 가변 크기 버퍼
     // =========================================================
@@ -57,41 +56,6 @@ void GatewaySession::Send(uint16_t pktId, const google::protobuf::Message& msg) 
             DoWrite();
         }
     });
-
-#else//DEF_STRESS_TEST_TOOL
-
-    std::string payload;
-    msg.SerializeToString(&payload);
-    PacketHeader header;
-    header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
-    header.id = pktId;
-
-    // MemoryPool을 활용한 락프리 버퍼 할당
-    SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
-    std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
-
-    memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
-    memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
-
-    auto self(shared_from_this());
-
-    size_t write_size = header.size;
-
-    // =========================================================
-    // ★ [핵심] 여러 스레드가 동시에 Send를 호출해도, strand_ 내부에서 안전하게 큐에 쌓입니다.
-    // =========================================================
-    boost::asio::post(strand_, [this, self, send_buf, write_size]() {
-        // 큐가 비어있었다면, 현재 소켓이 놀고 있다는 뜻이므로 즉시 전송을 시작합니다.
-        bool write_in_progress = !send_queue_.empty();
-
-        send_queue_.push_back({ send_buf, write_size });
-
-        if (!write_in_progress) {
-            DoWrite();
-        }
-    });
-
-#endif//DEF_STRESS_TEST_TOOL
 }
 
 // ★ [추가] 실제 비동기 전송을 수행하는 함수

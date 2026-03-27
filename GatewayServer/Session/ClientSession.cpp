@@ -39,8 +39,6 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
         return;
     }
 
-#ifdef  DEF_STRESS_TEST_TOOL
-
     uint16_t payloadSize = static_cast<uint16_t>(msg.ByteSizeLong());
     uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
@@ -73,35 +71,6 @@ void ClientSession::Send(uint16_t pktId, const google::protobuf::Message& msg) {
             DoWrite();
         }
     });
-
-#else //DEF_STRESS_TEST_TOOL
-
-    std::string payload;
-    msg.SerializeToString(&payload);
-    PacketHeader header;
-    header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
-    header.id = pktId;
-
-    SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
-    std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
-
-    memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
-    memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
-
-    auto self(shared_from_this());
-    size_t write_size = header.size;
-
-    // [BUG FIX] strand_ 내부에서 큐에 쌓고 DoWrite()로 순차 전송
-    boost::asio::post(strand_, [this, self, send_buf, write_size]() {
-        bool write_in_progress = !send_queue_.empty();
-        send_queue_.push_back({ send_buf, write_size });
-
-        if (!write_in_progress) {
-            DoWrite();
-        }
-    });
-
-#endif//DEF_STRESS_TEST_TOOL    
 }
 
 // ==========================================
