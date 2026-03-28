@@ -12,9 +12,6 @@
 
 using boost::asio::ip::tcp;
 
-// ★ 정적 멤버 정의 (싱글톤 DI 오버라이드 포인터)
-// s_test_instance_ 는 헤더에서 inline 으로 정의됩니다. (중복 정의 제거)
-
 class GatewayServer {
     tcp::acceptor acceptor_;
 public:
@@ -36,29 +33,32 @@ int main() {
 
     HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\GatewayServer_Unique_Mutex_Lock");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        std::cerr << "🚨 [Error] GatewayServer가 이미 실행 중입니다. 창을 닫습니다.\n";
+        std::cerr << "[Error] GatewayServer가 이미 실행 중입니다. 창을 닫습니다.\n";
         CloseHandle(hMutex);
         return 1;
     }
 
     if (!ConfigManager::GetInstance().LoadConfig("config.json")) {
-        std::cerr << "🚨 config 설정 파일 오류로 인해 GatewayServer 종료합니다.\n";
+        std::cerr << "config 설정 파일 오류로 인해 GatewayServer 종료합니다.\n";
         system("pause");
         return -1;
     }
 
-    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (GatewayServer는 대용량 서버)
     SendBufferPool::GetInstance().Initialize(PoolConfig::HEAVY_SERVER);
 
     auto& ctx = GatewayContext::Get();
 
+    // Client -> Gateway 핸들러 등록
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_CONNECT_REQ, Handle_GatewayConnectReq);
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_CHAT_REQ,    Handle_ChatReq);
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_MOVE_REQ,    Handle_MoveReq);
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_GATEWAY_ATTACK_REQ,  Handle_AttackReq);
 
-    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_MOVE_RES,   Handle_MoveRes_FromGame);
-    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_ATTACK_RES, Handle_GameGatewayAttackRes);
+    // Game -> Gateway 핸들러 등록
+    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_MOVE_RES,          Handle_MoveRes_FromGame);
+    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_ATTACK_RES,        Handle_GameGatewayAttackRes);
+    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_TOKEN_NOTIFY,      Handle_TokenNotify_FromGame);   // [추가] 토큰 통지
+    ctx.gameDispatcher.RegisterHandler(Protocol::PKT_GAME_GATEWAY_CHAT_RES,          Handle_ChatRes_FromGame);       // [추가] 채팅 AOI 응답
 
     try {
         boost::asio::io_context io_context;

@@ -282,3 +282,58 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
         target_monster->Die();
     }
 }
+
+// ==========================================
+// [추가] 채팅 AOI 처리 핸들러
+//
+// 변경 전: GatewayServer에서 clientMap 전체를 순회하여 모든 유저에게 브로드캐스트
+//   -> 동접 수천~수만 명일 때 즉시 병목
+//
+// 변경 후: GameServer의 Zone/AOI 시스템을 활용하여 주변 유저에게만 전달
+//   -> GatewayServer에서 S2S로 채팅 요청 수신
+//   -> 발신자의 위치 기반 AOI 내 유저 목록을 계산
+//   -> 대상 account_id 리스트와 함께 응답
+// ==========================================
+void Handle_GatewayGameChatReq(std::shared_ptr<GatewaySession>& session, char* payload, uint16_t payloadSize) {
+    Protocol::GatewayGameChatReq req;
+    if (!req.ParseFromArray(payload, payloadSize)) {
+        LOG_ERROR("GameServer", "ParseFromArray 실패: " << __func__ << " (payloadSize=" << payloadSize << ")");
+        return;
+    }
+
+    auto& ctx = GameContext::Get();
+    std::string acc_id = req.account_id();
+
+    // 발신자 위치 조회
+    float p_x = 0.0f, p_y = 0.0f;
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        auto it = ctx.playerMap.find(acc_id);
+        if (it == ctx.playerMap.end()) {
+            LOG_WARN("GameServer", "채팅 발신자가 playerMap에 없음: " << acc_id);
+            return;
+        }
+        std::lock_guard<std::mutex> p_lock(it->second->mtx);
+        p_x = it->second->x;
+        p_y = it->second->y;
+    }
+
+    // AOI 내 유저 목록 조회
+    auto aoi_uids = ctx.zone->GetPlayersInAOI(p_x, p_y);
+
+    Protocol::GameGatewayChatRes s2s_res;
+    s2s_res.set_account_id(acc_id);
+    s2s_res.set_msg(req.msg());
+
+    {
+        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        for (uint64_t uid : aoi_uids) {
+            auto it = ctx.uidToAccount.find(uid);
+            if (it != ctx.uidToAccount.end()) {
+                s2s_res.add_target_account_ids(it->second);
+            }
+        }
+    }
+
+    session->Send(Protocol::PKT_GAME_GATEWAY_CHAT_RES, s2s_res);
+}

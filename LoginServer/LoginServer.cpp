@@ -74,7 +74,7 @@ int main() {
         return -1;
     }
 
-    // ★ [추가] 서버 역할에 맞는 메모리 풀 초기화 (LoginServer는 경량 서버)
+    // 서버 역할에 맞는 메모리 풀 초기화 (LoginServer는 경량 서버)
     SendBufferPool::GetInstance().Initialize(PoolConfig::LIGHT_SERVER);
 
     auto& ctx = LoginContext::Get();
@@ -83,6 +83,19 @@ int main() {
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_SERVER_HEARTBEAT,       Handle_Heartbeat);
     ctx.clientDispatcher.RegisterHandler(Protocol::PKT_CLIENT_LOGIN_WORLD_SELECT_REQ, Handle_WorldSelectReq);
     ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_LOGIN_SELECT_RES,         Handle_S2SWorldSelectRes);
+
+    // ==========================================
+    // [수정] WorldServer가 브로드캐스트하는 토큰 통지 패킷 무시 등록
+    //
+    // WorldServer의 g_serverSessions에 GameServer와 LoginServer가 모두 포함되어
+    // TokenNotify 브로드캐스트 시 LoginServer에도 패킷이 전달됨.
+    // LoginServer는 토큰 통지를 처리할 필요가 없으므로 빈 핸들러를 등록하여
+    // "등록되지 않은 패킷 ID" 에러 로그가 출력되지 않도록 함.
+    // ==========================================
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_TOKEN_NOTIFY,
+        [](std::shared_ptr<WorldConnection>&, char*, uint16_t) {
+            // LoginServer에서는 토큰 통지를 처리하지 않음 (GameServer 전용)
+        });
 
     try {
         boost::asio::io_context io_context;

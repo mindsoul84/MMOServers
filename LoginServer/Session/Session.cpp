@@ -1,12 +1,15 @@
 ﻿#include "Session.h"
 #include "../../Common/MemoryPool.h"
+#include "../../Common/Define/GameConstants.h"
 #include <iostream>
 
 using boost::asio::ip::tcp;
 
 // [수정] heartbeat_timer_를 소켓의 executor에서 생성 (별도 io_context 불필요)
+// [수정] strand_ 초기화 추가
 Session::Session(tcp::socket socket) noexcept
     : socket_(std::move(socket))
+    , strand_(static_cast<boost::asio::io_context&>(socket_.get_executor().context()))
     , heartbeat_timer_(socket_.get_executor())
     , last_heartbeat_(std::chrono::steady_clock::now())
 {}
@@ -37,17 +40,27 @@ void Session::StartHeartbeatCheck() {
             now - last_heartbeat_).count();
 
         if (elapsed > HEARTBEAT_TIMEOUT_SECONDS) {
-            std::cerr << "[LoginServer] ⏰ 하트비트 타임아웃! 유저("
+            std::cerr << "[LoginServer] 하트비트 타임아웃! 유저("
                 << logged_in_id_ << ") " << elapsed << "초 동안 응답 없음. 연결 종료.\n";
             OnDisconnected();
             return;
         }
 
-        // 아직 타임아웃 아님 → 다음 체크 예약
         StartHeartbeatCheck();
     });
 }
 
+// ==========================================
+// [수정] Send() - strand + send_queue 패턴 적용
+//
+// 변경 전: async_write를 strand 없이 직접 호출
+//   -> DB 스레드의 post 콜백과 메인 스레드가 동시에 Send() 호출 시
+//      같은 소켓에 concurrent async_write 발생 -> TCP 스트림 오염
+//
+// 변경 후: strand_ 내부에서 큐에 쌓고 DoWrite()로 순차 전송
+//   -> 프로젝트 내 모든 세션 클래스(GatewaySession, ClientSession,
+//      GameConnection, WorldConnection, ServerSession)와 동일한 패턴 통일
+// ==========================================
 void Session::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
 
@@ -55,32 +68,57 @@ void Session::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     uint16_t totalSize = sizeof(PacketHeader) + payloadSize;
 
     if (totalSize > MAX_PACKET_SIZE) {
-        std::cerr << "🚨 [Error] 패킷 크기 초과! (PktID: " << pktId
+        std::cerr << "[LoginServer] 패킷 크기 초과! (PktID: " << pktId
             << ", Size: " << totalSize << " bytes) - 전송 취소\n";
         return;
     }
 
-    std::string payload;
-    msg.SerializeToString(&payload);
-    PacketHeader header;
-    header.size = static_cast<uint16_t>(sizeof(PacketHeader) + payload.size());
-    header.id = pktId;
-
+    // 메모리 풀에서 버퍼 대여 (전송 완료 시 SendBufferDeleter가 자동 반납)
     SendBuffer* raw_buf = SendBufferPool::GetInstance().Acquire();
     std::shared_ptr<SendBuffer> send_buf(raw_buf, SendBufferDeleter());
 
+    PacketHeader header;
+    header.size = totalSize;
+    header.id = pktId;
     memcpy(send_buf->buffer_.data(), &header, sizeof(PacketHeader));
-    memcpy(send_buf->buffer_.data() + sizeof(PacketHeader), payload.data(), payload.size());
+    msg.SerializeToArray(send_buf->buffer_.data() + sizeof(PacketHeader), payloadSize);
 
     auto self(shared_from_this());
-    boost::asio::async_write(socket_, boost::asio::buffer(send_buf->buffer_.data(), header.size),
-        [this, self, send_buf, pktId](boost::system::error_code ec, std::size_t) {
-            if (ec) {
-                // [수정] 에러 핸들링: 단순 무시 대신 로그 출력
-                std::cerr << "[LoginServer] ⚠️ 패킷 전송 실패 (PktID: " << pktId
-                    << ", 유저: " << logged_in_id_ << "): " << ec.message() << "\n";
+    boost::asio::post(strand_, [this, self, send_buf, totalSize]() {
+        if (send_queue_.size() > GameConstants::Network::SEND_QUEUE_MAX_SIZE) {
+            std::cerr << "[LoginServer] Session Send Queue 폭발! 전송 드랍.\n";
+            return;
+        }
+
+        bool write_in_progress = !send_queue_.empty();
+        send_queue_.emplace_back(send_buf, static_cast<size_t>(totalSize));
+
+        if (!write_in_progress) {
+            DoWrite();
+        }
+    });
+}
+
+// [추가] 실제 비동기 전송을 수행하는 함수
+void Session::DoWrite() {
+    auto self(shared_from_this());
+    auto& front_msg = send_queue_.front();
+
+    boost::asio::async_write(socket_,
+        boost::asio::buffer(front_msg.first->buffer_.data(), front_msg.second),
+        boost::asio::bind_executor(strand_, [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec) {
+                send_queue_.pop_front();
+                if (!send_queue_.empty()) {
+                    DoWrite();
+                }
             }
-        });
+            else {
+                std::cerr << "[LoginServer] 패킷 전송 실패 (DoWrite, 유저: "
+                    << logged_in_id_ << "): " << ec.message() << "\n";
+                send_queue_.clear();
+            }
+        }));
 }
 
 void Session::OnDisconnected() {
@@ -103,7 +141,7 @@ void Session::ReadHeader() {
             if (!ec) {
                 if (header_.size < sizeof(PacketHeader) || header_.size > MAX_PACKET_SIZE) {
                     // [수정] 에러 핸들링: 잘못된 헤더 크기 로그
-                    std::cerr << "[LoginServer] ⚠️ 잘못된 패킷 헤더 크기: " << header_.size
+                    std::cerr << "[LoginServer] 잘못된 패킷 헤더 크기: " << header_.size
                         << " (유저: " << logged_in_id_ << ")\n";
                     return;
                 }

@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 #include <chrono>
+#include <deque>
+#include <utility>
 
 #pragma warning(push)
 #pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
@@ -12,12 +14,24 @@
 
 #include "../LoginServer.h"
 
+struct SendBuffer; // 전방 선언
+
 // ==========================================
-// ★ Session 클래스 선언 (Client -> Login)
+// Session 클래스 선언 (Client -> Login)
+//
+// [수정] Send()에 strand + send_queue 패턴 적용
+//   DB 스레드의 post 콜백과 메인 스레드가 동시에 Send()를 호출할 경우
+//   concurrent async_write가 발생하여 TCP 스트림이 오염될 수 있었음.
+//   GatewaySession, ClientSession 등 다른 세션과 동일한 패턴으로 통일.
 // ==========================================
 class Session : public std::enable_shared_from_this<Session> {
 private:
     boost::asio::ip::tcp::socket socket_;
+
+    // [추가] strand + send_queue: concurrent async_write 방지
+    boost::asio::io_context::strand strand_;
+    std::deque<std::pair<std::shared_ptr<SendBuffer>, size_t>> send_queue_;
+
     PacketHeader header_;
     std::vector<char> payload_buf_;
     std::string logged_in_id_ = "";
@@ -48,7 +62,7 @@ public:
     const std::string& GetLoggedInId() const { return logged_in_id_; }
     void Send(uint16_t pktId, const google::protobuf::Message& msg);
 
-    // ★ [추가 - 수정] 하트비트 수신 시 Handle_Heartbeat()에서 호출
+    // [수정] 하트비트 수신 시 Handle_Heartbeat()에서 호출
     void UpdateHeartbeat() {
         last_heartbeat_ = std::chrono::steady_clock::now();
     }
@@ -57,7 +71,8 @@ private:
     void OnDisconnected();
     void ReadHeader();
     void ReadPayload(uint16_t payload_size);
-
-    // ★ [추가 - 수정] 타이머 기반 하트비트 타임아웃 체크 시작
     void StartHeartbeatCheck();
+
+    // [추가] 큐에서 패킷을 꺼내 실제로 전송하는 내부 함수
+    void DoWrite();
 };

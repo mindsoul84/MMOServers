@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <string>
+#include <chrono>
 
 #include "..\Common\Protocol\protocol.pb.h"
 #include "PacketDispatcher.h"
@@ -30,7 +31,16 @@ class ClientSession;
 //   GatewayContext::SetTestInstance(&testCtx);
 //   // ... 테스트 수행 ...
 //   GatewayContext::SetTestInstance(nullptr); // 복원
+// [추가] 대기 중인 토큰 엔트리
+//
+// WorldServer에서 발급된 토큰이 S2S 경로(World->Game->Gateway)를 통해
+// 도착하면 이 구조체에 저장됩니다. 클라이언트 접속 시 검증에 사용됩니다.
 // ==========================================
+struct PendingToken {
+    std::string session_token;
+    int64_t expire_time_ms;
+};
+
 struct GatewayContext {
     PacketDispatcher<ClientSession>  clientDispatcher;
     PacketDispatcher<GameConnection> gameDispatcher;
@@ -39,6 +49,42 @@ struct GatewayContext {
 
     std::unordered_map<std::string, std::shared_ptr<ClientSession>> clientMap;
     std::mutex clientMutex;
+
+    
+
+    // [추가] 세션 토큰 검증용 저장소
+    // Key: account_id, Value: PendingToken
+    // WorldServer -> GameServer -> GatewayServer 경로로 전달받은 토큰을 보관
+    std::unordered_map<std::string, PendingToken> pendingTokens;
+    std::mutex tokenMutex;
+
+    // [추가] 토큰 검증 함수
+    bool VerifyAndConsumeToken(const std::string& account_id, const std::string& token) {
+        std::lock_guard<std::mutex> lock(tokenMutex);
+        auto it = pendingTokens.find(account_id);
+        if (it == pendingTokens.end()) return false;
+
+        // 만료 시각 확인
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        if (it->second.expire_time_ms < now_ms) {
+            pendingTokens.erase(it);
+            return false;
+        }
+
+        // 토큰 비교
+        if (it->second.session_token != token) return false;
+
+        // 일회용: 검증 성공 후 삭제
+        pendingTokens.erase(it);
+        return true;
+    }
+
+    // [추가] 토큰 저장 함수
+    void StorePendingToken(const std::string& account_id, const std::string& token, int64_t expire_ms) {
+        std::lock_guard<std::mutex> lock(tokenMutex);
+        pendingTokens[account_id] = { token, expire_ms };
+    }
 
     // [수정] 테스트 인스턴스 오버라이드 포인터
     // [수정] inline 정의 (C++17) → 별도 .cpp 없이 링크 완결
@@ -51,7 +97,7 @@ struct GatewayContext {
         return instance;
     }
 
-    // ★ [추가 - 수정] 테스트 전용 주입 메서드
+    // [수정] 테스트 전용 주입 메서드
     static void SetTestInstance(GatewayContext* instance) noexcept {
         s_test_instance_ = instance;
     }

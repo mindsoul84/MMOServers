@@ -5,6 +5,8 @@
 #include <deque>
 #include <utility>
 #include <mutex>
+#include <unordered_map>
+#include <chrono>
 
 #pragma warning(push)
 #pragma warning(disable: 26495 26439 26451 26812 26815 26816 6385 6386 6001 6255 6387 6031 6258 26819 26498)
@@ -27,12 +29,62 @@ extern std::vector<std::shared_ptr<ServerSession>> g_serverSessions;
 extern std::mutex g_serverSessionMutex;
 
 // ==========================================
-// ServerSession: strand + send_queue 패턴 적용
+// [추가] 세션 토큰 저장소
 //
-// 변경 전: async_write를 strand 없이 직접 호출
-//   -> 여러 스레드에서 동시에 Send() 호출 시 TCP 스트림 오염
-// 변경 후: 모든 Send() 호출이 strand_ 내부에서 직렬화
-//   -> GatewaySession, ClientSession과 동일한 안전성 확보
+// WorldServer가 발급한 토큰을 보관하고,
+// 연결된 GameServer를 통해 GatewayServer에 전달합니다.
+// 토큰 만료 시각(expire_ms)을 통해 오래된 토큰을 자동 정리합니다.
+// ==========================================
+struct TokenEntry {
+    std::string account_id;
+    std::string token;
+    int64_t expire_ms;
+};
+
+class TokenStore {
+private:
+    std::unordered_map<std::string, TokenEntry> tokens_; // key: account_id
+    std::mutex mutex_;
+
+    static constexpr int64_t TOKEN_LIFETIME_MS = 300000; // 5분
+
+public:
+    // 토큰 발급 및 저장
+    void StoreToken(const std::string& account_id, const std::string& token) {
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        tokens_[account_id] = { account_id, token, now_ms + TOKEN_LIFETIME_MS };
+    }
+
+    // 만료된 토큰 정리 (주기적 호출)
+    void CleanExpired() {
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto it = tokens_.begin(); it != tokens_.end(); ) {
+            if (it->second.expire_ms < now_ms) {
+                it = tokens_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    int64_t GetExpireTime(const std::string& account_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = tokens_.find(account_id);
+        if (it != tokens_.end()) return it->second.expire_ms;
+        return 0;
+    }
+};
+
+extern TokenStore g_tokenStore;
+
+// ==========================================
+// ServerSession: strand + send_queue 패턴 적용
 // ==========================================
 class ServerSession : public std::enable_shared_from_this<ServerSession> {
 private:

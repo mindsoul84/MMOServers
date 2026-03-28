@@ -172,10 +172,15 @@ int main() {
     short ai_thread_count = ConfigManager::GetInstance().GetGameAiThreadCount();
     StartAIThreadPool(ai_thread_count);
 
+    // Gateway -> Game 핸들러 등록
     ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ,   Handle_GatewayGameMoveReq);
     ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ,  Handle_GatewayGameLeaveReq);
     ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_ATTACK_REQ, Handle_GatewayGameAttackReq);
+    ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_CHAT_REQ,   Handle_GatewayGameChatReq);    // [추가] 채팅 AOI
+
+    // World -> Game 핸들러 등록
     ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_MONSTER_BUFF,   Handle_WorldGameMonsterBuff);
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_TOKEN_NOTIFY,   Handle_WorldGameTokenNotify);  // [추가] 토큰 릴레이
 
     try {
         short game_port = ConfigManager::GetInstance().GetGameServerPort();

@@ -16,6 +16,9 @@ PacketDispatcher<ServerSession> g_s2s_dispatcher;
 std::vector<std::shared_ptr<ServerSession>> g_serverSessions;
 std::mutex g_serverSessionMutex;
 
+// [추가] 토큰 저장소 전역 인스턴스
+TokenStore g_tokenStore;
+
 // ==========================================
 // Graceful Shutdown
 // ==========================================

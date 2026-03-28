@@ -169,6 +169,25 @@ void StressSession::HandlePacket(uint16_t pktId, const char* payload, uint16_t s
             manager_->OnSessionConnected(); // 인게임 접속자 통계 증가
             ScheduleNextAction(); // 본격적인 봇 AI 가동
         }
+        // ==========================================
+        // [수정] GatewayConnectRes 실패 시 처리 추가
+        //
+        // 토큰 검증 도입(v1.0.8) 이후 발생한 사이드 이펙트 수정.
+        //
+        // [문제]
+        // 토큰 릴레이 경로(World -> Game -> Gateway)와 클라이언트 접속 경로가
+        // 비동기적으로 경합하여, 클라이언트가 Gateway에 먼저 도착하면
+        // pendingTokens에 아직 토큰이 없어서 접속이 거부됨.
+        // 기존 코드는 success==false 일 때 아무 처리를 하지 않아
+        // 봇이 WAITING_GATEWAY_RES 상태에서 영원히 정지(좀비화)됨.
+        //
+        // [수정]
+        // 접속 실패 시 Stop()을 호출하여 StressManager가 봇을 재생성하도록 함.
+        // 재생성 시 500ms 딜레이가 있으므로 토큰 릴레이가 완료된 후 재시도됨.
+        // ==========================================
+        else {
+            Stop();
+        }
     }
 }
 

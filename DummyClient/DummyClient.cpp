@@ -77,7 +77,7 @@ bool ProcessLogin(tcp::socket& socket, tcp::resolver& resolver, bool use_db, std
                 std::cout << "[DummyClient] 계정 로그인 성공! 월드(1) 선택 요청 중...\n";
                 return true;
             }
-            std::cout << "\n❌ [로그인 실패] 비밀번호가 틀렸거나 이미 접속 중인 계정입니다. 다시 시도해 주세요.\n";
+            std::cout << "\n[로그인 실패] 비밀번호가 틀렸거나 이미 접속 중인 계정입니다. 다시 시도해 주세요.\n";
         }
     }
     return false;
@@ -101,7 +101,7 @@ bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string
         out_token = w_res.session_token();
         out_ip = w_res.gateway_ip();
         out_port = w_res.gateway_port();
-        std::cout << "[DummyClient] 🎉 월드 입장 승인 완료! 토큰 발급됨.\n";
+        std::cout << "[DummyClient] 월드 입장 승인 완료! 토큰 발급됨.\n";
         return true;
     }
     return false;
@@ -111,8 +111,8 @@ bool ProcessWorldSelect(tcp::socket& socket, std::string& out_token, std::string
 // [3] 백그라운드 수신 스레드 가동 함수
 // =======================================================
 // [수정] detach() 제거: 스레드를 반환하여 호출부에서 join 가능하게 변경
-// 변경 전: void 반환 + detach() → 수명 관리 불가, 소켓 댕글링 위험
-// 변경 후: std::thread 반환 → 호출부에서 joinable 상태로 유지 및 join 가능
+// 변경 전: void 반환 + detach() -> 수명 관리 불가, 소켓 댕글링 위험
+// 변경 후: std::thread 반환 -> 호출부에서 joinable 상태로 유지 및 join 가능
 std::thread StartReceiveThread(tcp::socket& socket, const std::string& my_id, float& my_x, float& my_y, int& my_hp, std::unordered_map<std::string, std::pair<float, float>>& monster_pos_map) {
     std::thread recv_thread([&socket, my_id, &my_x, &my_y, &my_hp, &monster_pos_map]() {
         try {
@@ -214,7 +214,7 @@ int main() {
     // 가장 먼저 환경 설정(config.json)을 로드합니다.
     if (!ConfigManager::GetInstance().LoadConfig("config.json"))
     {
-        std::cerr << "🚨 config 설정 파일 오류로 인해 DummyClient 종료합니다.\n";
+        std::cerr << "config 설정 파일 오류로 인해 DummyClient 종료합니다.\n";
         system("pause"); // 디버깅 창이 바로 꺼지지 않게 대기
         return -1;
     }
@@ -251,8 +251,26 @@ int main() {
         std::vector<char> res_payload(res_header.size - sizeof(PacketHeader));
         if (!res_payload.empty()) boost::asio::read(socket, boost::asio::buffer(res_payload.data(), res_payload.size()));
 
+        // ==========================================
+        // [수정] GatewayConnectRes 검증 추가
+        //
+        // 변경 전: 패킷 ID만 확인하고 success 필드를 검사하지 않음
+        //   -> 토큰 검증 실패 시에도 인게임에 진입한 것처럼 동작
+        //
+        // 변경 후: success 필드를 확인하여 실패 시 에러 메시지 출력 후 종료
+        // ==========================================
         if (res_header.id == Protocol::PKT_GATEWAY_CLIENT_CONNECT_RES) {
-            std::cout << "======================================\n       🕹️ 인게임 세계에 진입했습니다!       \n======================================\n";
+            Protocol::GatewayConnectRes gw_res;
+            if (gw_res.ParseFromArray(res_payload.data(), res_payload.size()) && gw_res.success()) {
+                std::cout << "======================================\n       [인게임 세계에 진입했습니다!]       \n======================================\n";
+            }
+            else {
+                std::string reason = gw_res.reason().empty() ? "알 수 없는 오류" : gw_res.reason();
+                std::cerr << "\n[접속 실패] 게이트웨이 인증 거부: " << reason << "\n";
+                std::cerr << "서버를 재시작하거나 잠시 후 다시 시도해 주세요.\n";
+                system("pause");
+                return 0;
+            }
         }
 
         // 4. 인게임 로직 실행

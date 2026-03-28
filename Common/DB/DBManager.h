@@ -12,7 +12,7 @@
 #include <sql.h>
 #include <sqlext.h>
 
-// 클래스 외부(상단)에 로그인 결과 Enum 추가
+// 로그인 결과 Enum
 enum class LoginResult {
     SUCCESS,
     NEW_REGISTERED,
@@ -26,8 +26,6 @@ private:
     SQLHDBC hdbc_ = SQL_NULL_HDBC; // 연결 핸들    
 
 public:
-    // ★ 1. DBManager ODBC Thread-Local DB Connection Pool 도입: 싱글톤 삭제, 기본 생성자 public 이동
-
     DBManager() = default;
     ~DBManager() { Disconnect(); }
 
@@ -44,8 +42,18 @@ public:
     // 에러 출력 헬퍼 함수
     void PrintError(SQLSMALLINT handleType, SQLHANDLE handle);
 
-    // DBManager 클래스 내부에 함수 원형 추가
-    LoginResult ProcessLogin(const std::string& id, const std::string& pw, int input_type);
+    // ==========================================
+    // [수정] DB 스키마 변경 반영 (account_id -> account_name, account_uid 추가)
+    //
+    // 변경 전: ProcessLogin(id, pw, input_type)
+    //   -> Accounts.account_id 컬럼으로 조회/삽입
+    //
+    // 변경 후: ProcessLogin(id, pw, input_type, out_account_uid)
+    //   -> Accounts.account_name 컬럼으로 조회/삽입
+    //   -> 로그인 성공 또는 신규 가입 시 account_uid를 out_account_uid에 반환
+    //   -> 기존 호출부 호환: out_account_uid 기본값 nullptr
+    // ==========================================
+    LoginResult ProcessLogin(const std::string& id, const std::string& pw, int input_type, int64_t* out_account_uid = nullptr);
 };
 
 // =========================================================
