@@ -8,6 +8,8 @@
 #include <memory>
 #include <functional>
 
+#include "../../Common/Utils/Lock.h"
+
 // ==========================================
 // [AOI 시스템 개선]
 //
@@ -25,7 +27,8 @@
 // ==========================================
 
 struct Sector {
-    mutable std::shared_mutex mutex_;
+    // [수정] UTILITY::Lock(std::shared_timed_mutex) 타입으로 통일
+    mutable UTILITY::Lock mutex_;
     std::unordered_set<uint64_t> players_;
     std::unordered_set<uint64_t> monsters_;
 
@@ -39,17 +42,19 @@ struct Sector {
     std::vector<uint64_t> GetMonsters() const;
 
     // 콜백 기반 조회: 벡터 할당 없이 직접 순회
+    // [수정] UTILITY::ReadLock 타입으로 통일
     template<typename Func>
     void ForEachPlayer(Func&& callback) const {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
+        UTILITY::ReadLock r_lock(mutex_);
         for (uint64_t id : players_) {
             callback(id);
         }
     }
 
+    // [수정] UTILITY::ReadLock 타입으로 통일
     template<typename Func>
     void ForEachMonster(Func&& callback) const {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
+        UTILITY::ReadLock r_lock(mutex_);
         for (uint64_t id : monsters_) {
             callback(id);
         }

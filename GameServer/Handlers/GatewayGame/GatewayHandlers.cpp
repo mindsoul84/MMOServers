@@ -23,6 +23,8 @@
 //   -> playerMutex_: playerMap, uidToAccount 보호
 //   -> monsterMutex_: monsterMap 보호 (공격 시에만 사용)
 //   -> uidCounter: atomic 연산으로 락 불필요
+//
+// [수정] 모든 락 타입을 UTILITY::WriteLock/ReadLock으로 통일
 // ==========================================
 
 // [게이트웨이 -> 게임서버] 유저 이동 처리
@@ -50,7 +52,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
     // 1단계: playerMutex_ 읽기 락으로 유저 검색
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
         auto it = ctx.playerMap.find(acc_id);
         if (it != ctx.playerMap.end()) player_ptr = it->second;
     }
@@ -60,7 +62,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
         bool is_new = false;
 
         {
-            std::unique_lock<std::shared_mutex> write_lock(ctx.playerMutex_);
+            UTILITY::WriteLock write_lock(ctx.playerMutex_);
             auto it = ctx.playerMap.find(acc_id);
             if (it == ctx.playerMap.end()) {
                 // atomic uidCounter: 락 없이 안전한 UID 발급
@@ -111,7 +113,7 @@ void Handle_GatewayGameMoveReq(std::shared_ptr<GatewaySession>& session, char* p
 
     // AOI 대상 account_id 조회: playerMutex_ 읽기 락
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
 
         int broadcast_limit = 0;
         for (uint64_t target_uid : aoi_uids) {
@@ -144,7 +146,7 @@ void Handle_GatewayGameLeaveReq(std::shared_ptr<GatewaySession>& session, char* 
 
     // playerMutex_ 쓰기 락으로 삭제
     {
-        std::unique_lock<std::shared_mutex> lock(ctx.playerMutex_);
+        UTILITY::WriteLock write_lock(ctx.playerMutex_);
         auto it = ctx.playerMap.find(acc_id);
         if (it != ctx.playerMap.end()) {
             uid = it->second->uid;
@@ -191,7 +193,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     // playerMutex_ 읽기 락: 플레이어 검색
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
         auto it_player = ctx.playerMap.find(account_id);
         if (it_player == ctx.playerMap.end()) return;
         player_ptr = it_player->second;
@@ -215,7 +217,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
 
     // monsterMutex_ 읽기 락: 몬스터 검색 (playerMutex_와 독립)
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.monsterMutex_);
+        UTILITY::ReadLock read_lock(ctx.monsterMutex_);
         for (uint64_t mon_id : aoi_mon_ids) {
             auto it_mon = ctx.monsterMap.find(mon_id);
             if (it_mon == ctx.monsterMap.end()) continue;
@@ -263,7 +265,7 @@ void Handle_GatewayGameAttackReq(std::shared_ptr<GatewaySession>& session, char*
     auto aoi_uids = ctx.zone->GetPlayersInAOI(p_x, p_y);
     // playerMutex_ 읽기 락: AOI 유저 이름 조회
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
 
         int broadcast_limit = 0;
         for (uint64_t uid : aoi_uids) {
@@ -307,7 +309,7 @@ void Handle_GatewayGameChatReq(std::shared_ptr<GatewaySession>& session, char* p
     // 발신자 위치 조회
     float p_x = 0.0f, p_y = 0.0f;
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
         auto it = ctx.playerMap.find(acc_id);
         if (it == ctx.playerMap.end()) {
             LOG_WARN("GameServer", "채팅 발신자가 playerMap에 없음: " << acc_id);
@@ -326,7 +328,7 @@ void Handle_GatewayGameChatReq(std::shared_ptr<GatewaySession>& session, char* p
     s2s_res.set_msg(req.msg());
 
     {
-        std::shared_lock<std::shared_mutex> read_lock(ctx.playerMutex_);
+        UTILITY::ReadLock read_lock(ctx.playerMutex_);
         for (uint64_t uid : aoi_uids) {
             auto it = ctx.uidToAccount.find(uid);
             if (it != ctx.uidToAccount.end()) {

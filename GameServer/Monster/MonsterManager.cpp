@@ -43,9 +43,9 @@ void InitMonsters() {
             std::shared_ptr<PlayerInfo> player_ptr;
             std::string acc_id_str;
 
-            // playerMutex_ 읽기 락: 유저 찾기
+            // [수정] UTILITY::ReadLock 타입으로 통일 — playerMutex_ 읽기 락: 유저 찾기
             {
-                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.playerMutex_);
+                UTILITY::ReadLock read_lock(ctx_inner.playerMutex_);
                 auto it_acc = ctx_inner.uidToAccount.find(target_uid);
                 if (it_acc == ctx_inner.uidToAccount.end()) return;
                 acc_id_str = it_acc->second;
@@ -80,7 +80,7 @@ void InitMonsters() {
             auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(p_x, p_y);
 
             {
-                std::shared_lock<std::shared_mutex> read_lock(ctx_inner.playerMutex_);
+                UTILITY::ReadLock read_lock(ctx_inner.playerMutex_);
                 for (uint64_t aoi_uid : aoi_uids) {
                     auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
                     if (target_acc != ctx_inner.uidToAccount.end()) {
@@ -153,6 +153,8 @@ void InitMonsters() {
 //
 // 주의: 아래 함수들은 모두 ScheduleNextAITick 내부에서
 //       monsterMutex_ shared_lock을 보유한 상태에서 호출됩니다.
+//
+// [수정] 모든 락 타입을 UTILITY::ReadLock으로 통일
 // ==========================================
 
 // [분리] 몬스터 사망 상태 처리
@@ -179,7 +181,7 @@ void ProcessDeadMonster(std::shared_ptr<Monster>& mon, float delta_time) {
 
     // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
     {
-        std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+        UTILITY::ReadLock p_lock(ctx.playerMutex_);
         for (uint64_t target_uid : aoi_uids) {
             auto it = ctx.uidToAccount.find(target_uid);
             if (it != ctx.uidToAccount.end()) {
@@ -197,7 +199,7 @@ void ProcessIdleMonster(std::shared_ptr<Monster>& mon, float old_x, float old_y)
     auto aoi_uids = ctx.zone->GetPlayersInAOI(old_x, old_y);
 
     // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+    UTILITY::ReadLock p_lock(ctx.playerMutex_);
     for (uint64_t uid : aoi_uids) {
         auto it_acc = ctx.uidToAccount.find(uid);
         if (it_acc == ctx.uidToAccount.end()) continue;
@@ -222,7 +224,7 @@ void ProcessChaseMonster(std::shared_ptr<Monster>& mon, float old_x, float old_y
 
     // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
     {
-        std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+        UTILITY::ReadLock p_lock(ctx.playerMutex_);
         auto it_acc = ctx.uidToAccount.find(target_uid);
         if (it_acc != ctx.uidToAccount.end()) {
             auto it_player = ctx.playerMap.find(it_acc->second);
@@ -248,7 +250,7 @@ void ProcessAttackMonster(std::shared_ptr<Monster>& mon, float old_x, float old_
 
     // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
     {
-        std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+        UTILITY::ReadLock p_lock(ctx.playerMutex_);
         auto it_acc = ctx.uidToAccount.find(target_uid);
         if (it_acc != ctx.uidToAccount.end()) {
             auto it_player = ctx.playerMap.find(it_acc->second);
@@ -297,7 +299,7 @@ void SyncMonsterPosition(std::shared_ptr<Monster>& mon, float old_x, float old_y
 
     // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
     {
-        std::shared_lock<std::shared_mutex> p_lock(ctx.playerMutex_);
+        UTILITY::ReadLock p_lock(ctx.playerMutex_);
         for (uint64_t target_uid : aoi_uids) {
             auto it = ctx.uidToAccount.find(target_uid);
             if (it != ctx.uidToAccount.end()) {
@@ -328,8 +330,8 @@ void ScheduleNextAITick() {
         float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
         g_last_ai_time = current_time;
 
-        // monsterMutex_ 읽기 락 범위
-        std::shared_lock<std::shared_mutex> mon_lock(ctx.monsterMutex_);
+        // [수정] UTILITY::ReadLock 타입으로 통일 — monsterMutex_ 읽기 락 범위
+        UTILITY::ReadLock mon_lock(ctx.monsterMutex_);
 
         for (auto& mon : ctx.monsters) {
 

@@ -4,40 +4,41 @@
 
 // =========================================================
 // Sector 구현부
+// [수정] 모든 락 타입을 UTILITY::WriteLock/ReadLock으로 통일
 // =========================================================
 
 void Sector::AddPlayer(uint64_t player_id) {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::WriteLock w_lock(mutex_);
     players_.insert(player_id);
 }
 
 void Sector::RemovePlayer(uint64_t player_id) {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::WriteLock w_lock(mutex_);
     players_.erase(player_id);
 }
 
 std::vector<uint64_t> Sector::GetPlayers() const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::ReadLock r_lock(mutex_);
     return std::vector<uint64_t>(players_.begin(), players_.end());
 }
 
 size_t Sector::GetPlayerCount() const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::ReadLock r_lock(mutex_);
     return players_.size();
 }
 
 void Sector::AddMonster(uint64_t mon_id) {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::WriteLock w_lock(mutex_);
     monsters_.insert(mon_id);
 }
 
 void Sector::RemoveMonster(uint64_t mon_id) {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::WriteLock w_lock(mutex_);
     monsters_.erase(mon_id);
 }
 
 std::vector<uint64_t> Sector::GetMonsters() const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    UTILITY::ReadLock r_lock(mutex_);
     return std::vector<uint64_t>(monsters_.begin(), monsters_.end());
 }
 

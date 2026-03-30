@@ -18,8 +18,8 @@ void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char
 
     auto& ctx = GameContext::Get();
 
-    // monsterMutex_ 쓰기 락: 몬스터 체력 변경
-    std::unique_lock<std::shared_mutex> lock(ctx.monsterMutex_);
+    // [수정] UTILITY::WriteLock 타입으로 통일 — monsterMutex_ 쓰기 락: 몬스터 체력 변경
+    UTILITY::WriteLock w_lock(ctx.monsterMutex_);
 
     uint64_t min_uid = req->min_uid();
     uint64_t max_uid = req->max_uid();

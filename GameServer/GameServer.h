@@ -22,6 +22,7 @@
 
 #include "../Common/DataManager/DataManager.h"
 #include "../Common/Define/GameConstants.h"
+#include "../Common/Utils/Lock.h"
 
 #pragma pack(push, 1)
 struct PacketHeader {
@@ -68,12 +69,14 @@ struct GameContext {
     boost::asio::io_context io_context;
 
     // [락 분리] 플레이어 상태 보호 (이동, 접속/퇴장 빈번)
-    mutable std::shared_mutex playerMutex_;
+    // [수정] UTILITY::Lock(std::shared_timed_mutex) 타입으로 통일
+    mutable UTILITY::Lock playerMutex_;
     std::unordered_map<std::string, std::shared_ptr<PlayerInfo>> playerMap;
     std::unordered_map<uint64_t, std::string> uidToAccount;
 
     // [락 분리] 몬스터 상태 보호 (초기화 후 거의 읽기 전용)
-    mutable std::shared_mutex monsterMutex_;
+    // [수정] UTILITY::Lock(std::shared_timed_mutex) 타입으로 통일
+    mutable UTILITY::Lock monsterMutex_;
     std::unordered_map<uint64_t, std::shared_ptr<Monster>> monsterMap;
     std::vector<std::shared_ptr<Monster>> monsters;
 
