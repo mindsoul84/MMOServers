@@ -17,7 +17,6 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
-#include <shared_mutex>
 #include <unordered_map>
 #include <cmath>
 #include <boost/asio.hpp>
@@ -28,6 +27,11 @@ static std::unordered_map<uint64_t, float> g_sync_timers;
 
 // ==========================================
 // 몬스터 초기 스폰 함수
+//
+// [수정] game_strand_ 도입에 따라 공격 콜백 내부의
+// playerMutex_ ReadLock, PlayerInfo::mtx lock_guard 전부 제거.
+// 콜백은 AI Tick에서 호출되며, AI Tick은 game_strand_에서 실행되므로
+// playerMap, PlayerInfo에 대한 동시 접근이 원천적으로 불가능합니다.
 // ==========================================
 void InitMonsters() {
     auto& ctx = GameContext::Get();
@@ -40,33 +44,22 @@ void InitMonsters() {
 
         mon->SetOnAttackCallback([](uint64_t attacker_uid, uint64_t target_uid, int damage) {
             auto& ctx_inner = GameContext::Get();
-            std::shared_ptr<PlayerInfo> player_ptr;
-            std::string acc_id_str;
 
-            // [수정] UTILITY::ReadLock 타입으로 통일 — playerMutex_ 읽기 락: 유저 찾기
-            {
-                UTILITY::ReadLock read_lock(ctx_inner.playerMutex_);
-                auto it_acc = ctx_inner.uidToAccount.find(target_uid);
-                if (it_acc == ctx_inner.uidToAccount.end()) return;
-                acc_id_str = it_acc->second;
+            // [수정] game_strand_ 보호 하에 직접 접근 (뮤텍스 불필요)
+            auto it_acc = ctx_inner.uidToAccount.find(target_uid);
+            if (it_acc == ctx_inner.uidToAccount.end()) return;
+            std::string acc_id_str = it_acc->second;
 
-                auto it_player = ctx_inner.playerMap.find(it_acc->second);
-                if (it_player == ctx_inner.playerMap.end()) return;
-                player_ptr = it_player->second;
-            }
+            auto it_player = ctx_inner.playerMap.find(acc_id_str);
+            if (it_player == ctx_inner.playerMap.end()) return;
+            auto& player_ptr = it_player->second;
 
-            int remain_hp = 0;
-            float p_x, p_y;
-
-            // 개별 유저 락으로 체력 깎기
-            {
-                std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
-                player_ptr->hp -= damage;
-                if (player_ptr->hp < 0) player_ptr->hp = 0;
-                remain_hp = player_ptr->hp;
-                p_x = player_ptr->x;
-                p_y = player_ptr->y;
-            }
+            // [수정] PlayerInfo::mtx 제거 — game_strand_ 보호
+            player_ptr->hp -= damage;
+            if (player_ptr->hp < 0) player_ptr->hp = 0;
+            int remain_hp = player_ptr->hp;
+            float p_x = player_ptr->x;
+            float p_y = player_ptr->y;
 
             RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, remain_hp);
 
@@ -79,13 +72,10 @@ void InitMonsters() {
 
             auto aoi_uids = ctx_inner.zone->GetPlayersInAOI(p_x, p_y);
 
-            {
-                UTILITY::ReadLock read_lock(ctx_inner.playerMutex_);
-                for (uint64_t aoi_uid : aoi_uids) {
-                    auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
-                    if (target_acc != ctx_inner.uidToAccount.end()) {
-                        s2s_res.add_target_account_ids(target_acc->second);
-                    }
+            for (uint64_t aoi_uid : aoi_uids) {
+                auto target_acc = ctx_inner.uidToAccount.find(aoi_uid);
+                if (target_acc != ctx_inner.uidToAccount.end()) {
+                    s2s_res.add_target_account_ids(target_acc->second);
                 }
             }
 
@@ -101,12 +91,10 @@ void InitMonsters() {
                 float old_x = p_x;
                 float old_y = p_y;
 
-                {
-                    std::lock_guard<std::mutex> p_lock(player_ptr->mtx);
-                    player_ptr->hp = GameConstants::Player::DEFAULT_HP;
-                    player_ptr->x = GameConstants::Player::SPAWN_X;
-                    player_ptr->y = GameConstants::Player::SPAWN_Y;
-                }
+                // [수정] PlayerInfo::mtx 제거 — game_strand_ 보호
+                player_ptr->hp = GameConstants::Player::DEFAULT_HP;
+                player_ptr->x = GameConstants::Player::SPAWN_X;
+                player_ptr->y = GameConstants::Player::SPAWN_Y;
 
                 // Redis HP 갱신 (부활: HP 100으로 복구)
                 RedisManager::GetInstance().UpdatePlayerHp(acc_id_str, GameConstants::Player::DEFAULT_HP);
@@ -147,14 +135,9 @@ void InitMonsters() {
 // ==========================================
 // [리팩토링] 상태별 처리 함수 분리
 //
-// 락 획득 순서 규칙:
-//   monsterMutex_(호출부에서 이미 보유) -> playerMutex_ 획득 (OK)
-//   이 순서는 GatewayHandlers.cpp와 일관되어 데드락이 발생하지 않습니다.
-//
-// 주의: 아래 함수들은 모두 ScheduleNextAITick 내부에서
-//       monsterMutex_ shared_lock을 보유한 상태에서 호출됩니다.
-//
-// [수정] 모든 락 타입을 UTILITY::ReadLock으로 통일
+// [수정] game_strand_에서 실행되므로 모든 뮤텍스 제거.
+// 기존 락 순서 규칙(monsterMutex_ -> playerMutex_)이 필요 없어짐.
+// 아래 함수들은 모두 ScheduleNextAITick의 game_strand_ 콜백 내에서 호출됩니다.
 // ==========================================
 
 // [분리] 몬스터 사망 상태 처리
@@ -179,14 +162,11 @@ void ProcessDeadMonster(std::shared_ptr<Monster>& mon, float delta_time) {
     s2s_res.set_z(mon->GetPosition().z);
     s2s_res.set_yaw(0.0f);
 
-    // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    {
-        UTILITY::ReadLock p_lock(ctx.playerMutex_);
-        for (uint64_t target_uid : aoi_uids) {
-            auto it = ctx.uidToAccount.find(target_uid);
-            if (it != ctx.uidToAccount.end()) {
-                s2s_res.add_target_account_ids(it->second);
-            }
+    // [수정] game_strand_ 보호 — 뮤텍스 불필요
+    for (uint64_t target_uid : aoi_uids) {
+        auto it = ctx.uidToAccount.find(target_uid);
+        if (it != ctx.uidToAccount.end()) {
+            s2s_res.add_target_account_ids(it->second);
         }
     }
     ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
@@ -198,8 +178,7 @@ void ProcessIdleMonster(std::shared_ptr<Monster>& mon, float old_x, float old_y)
 
     auto aoi_uids = ctx.zone->GetPlayersInAOI(old_x, old_y);
 
-    // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    UTILITY::ReadLock p_lock(ctx.playerMutex_);
+    // [수정] game_strand_ 보호 — 뮤텍스 불필요
     for (uint64_t uid : aoi_uids) {
         auto it_acc = ctx.uidToAccount.find(uid);
         if (it_acc == ctx.uidToAccount.end()) continue;
@@ -222,19 +201,16 @@ void ProcessChaseMonster(std::shared_ptr<Monster>& mon, float old_x, float old_y
     uint64_t target_uid = mon->GetTargetUserId();
     bool target_found = false;
 
-    // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    {
-        UTILITY::ReadLock p_lock(ctx.playerMutex_);
-        auto it_acc = ctx.uidToAccount.find(target_uid);
-        if (it_acc != ctx.uidToAccount.end()) {
-            auto it_player = ctx.playerMap.find(it_acc->second);
-            if (it_player != ctx.playerMap.end()) {
-                float dx = it_player->second->x - old_x;
-                float dy = it_player->second->y - old_y;
-                if (std::sqrt(dx * dx + dy * dy) <= GameConstants::Monster::CHASE_RANGE) {
-                    mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
-                    target_found = true;
-                }
+    // [수정] game_strand_ 보호 — 뮤텍스 불필요
+    auto it_acc = ctx.uidToAccount.find(target_uid);
+    if (it_acc != ctx.uidToAccount.end()) {
+        auto it_player = ctx.playerMap.find(it_acc->second);
+        if (it_player != ctx.playerMap.end()) {
+            float dx = it_player->second->x - old_x;
+            float dy = it_player->second->y - old_y;
+            if (std::sqrt(dx * dx + dy * dy) <= GameConstants::Monster::CHASE_RANGE) {
+                mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
+                target_found = true;
             }
         }
     }
@@ -248,19 +224,16 @@ void ProcessAttackMonster(std::shared_ptr<Monster>& mon, float old_x, float old_
     uint64_t target_uid = mon->GetTargetUserId();
     bool target_found = false;
 
-    // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    {
-        UTILITY::ReadLock p_lock(ctx.playerMutex_);
-        auto it_acc = ctx.uidToAccount.find(target_uid);
-        if (it_acc != ctx.uidToAccount.end()) {
-            auto it_player = ctx.playerMap.find(it_acc->second);
-            if (it_player != ctx.playerMap.end()) {
-                float dx = it_player->second->x - old_x;
-                float dy = it_player->second->y - old_y;
-                if (std::sqrt(dx * dx + dy * dy) <= GameConstants::Monster::CHASE_RANGE) {
-                    mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
-                    target_found = true;
-                }
+    // [수정] game_strand_ 보호 — 뮤텍스 불필요
+    auto it_acc = ctx.uidToAccount.find(target_uid);
+    if (it_acc != ctx.uidToAccount.end()) {
+        auto it_player = ctx.playerMap.find(it_acc->second);
+        if (it_player != ctx.playerMap.end()) {
+            float dx = it_player->second->x - old_x;
+            float dy = it_player->second->y - old_y;
+            if (std::sqrt(dx * dx + dy * dy) <= GameConstants::Monster::CHASE_RANGE) {
+                mon->UpdateTargetPosition({ it_player->second->x, it_player->second->y, 0.0f });
+                target_found = true;
             }
         }
     }
@@ -297,77 +270,79 @@ void SyncMonsterPosition(std::shared_ptr<Monster>& mon, float old_x, float old_y
     s2s_res.set_z(mon->GetPosition().z);
     s2s_res.set_yaw(0.0f);
 
-    // 락 순서: monsterMutex_(이미 보유) -> playerMutex_ (OK)
-    {
-        UTILITY::ReadLock p_lock(ctx.playerMutex_);
-        for (uint64_t target_uid : aoi_uids) {
-            auto it = ctx.uidToAccount.find(target_uid);
-            if (it != ctx.uidToAccount.end()) {
-                s2s_res.add_target_account_ids(it->second);
-            }
+    // [수정] game_strand_ 보호 — 뮤텍스 불필요
+    for (uint64_t target_uid : aoi_uids) {
+        auto it = ctx.uidToAccount.find(target_uid);
+        if (it != ctx.uidToAccount.end()) {
+            s2s_res.add_target_account_ids(it->second);
         }
     }
     ctx.BroadcastToGateways(Protocol::PKT_GAME_GATEWAY_MOVE_RES, s2s_res);
 }
 
 // ==========================================
-// [리팩토링] ScheduleNextAITick - 상태별 분기를 함수 호출로 대체
+// [수정] ScheduleNextAITick - game_strand_ 바인딩
 //
-// 변경 전: 200줄 이상의 단일 람다 (IDLE/CHASE/ATTACK/DEAD 전부 인라인)
-// 변경 후: 상태별 함수 호출로 각 20~30줄 단위의 독립 함수로 분리
-//          -> 락 범위가 함수 단위로 명확해져 데드락 추적 용이
-//          -> 상태별 단위 테스트가 가능해짐
+// 변경 전: 타이머 콜백이 io_context의 아무 워커 스레드에서 실행됨
+//   -> monsterMutex_ shared_lock 필요
+//   -> 내부에서 playerMutex_도 추가 획득하여 락 중첩 발생
+//
+// 변경 후: bind_executor(game_strand_)로 콜백을 바인딩
+//   -> 패킷 핸들러와 동일한 strand에서 실행됨
+//   -> playerMap, monsterMap 접근 시 뮤텍스 불필요
+//   -> Monster::Update()도 strand에서 실행되므로 스레드 안전
 // ==========================================
 void ScheduleNextAITick() {
     g_ai_timer->expires_after(std::chrono::milliseconds(GameConstants::AI::TICK_INTERVAL_MS));
 
-    g_ai_timer->async_wait([](const boost::system::error_code& ec) {
-        if (ec) return;
+    auto& ctx = GameContext::Get();
+    g_ai_timer->async_wait(
+        boost::asio::bind_executor(ctx.game_strand_, [](const boost::system::error_code& ec) {
+            if (ec) return;
 
-        auto& ctx = GameContext::Get();
+            auto& ctx = GameContext::Get();
 
-        auto current_time = std::chrono::steady_clock::now();
-        float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
-        g_last_ai_time = current_time;
+            auto current_time = std::chrono::steady_clock::now();
+            float delta_time = std::chrono::duration<float>(current_time - g_last_ai_time).count();
+            g_last_ai_time = current_time;
 
-        // [수정] UTILITY::ReadLock 타입으로 통일 — monsterMutex_ 읽기 락 범위
-        UTILITY::ReadLock mon_lock(ctx.monsterMutex_);
+            // [수정] game_strand_에서 실행 — monsterMutex_ 불필요
+            for (auto& mon : ctx.monsters) {
 
-        for (auto& mon : ctx.monsters) {
+                // 1. 사망 상태 처리
+                if (mon->GetState() == MonsterState::DEAD) {
+                    ProcessDeadMonster(mon, delta_time);
+                    continue;
+                }
 
-            // 1. 사망 상태 처리
-            if (mon->GetState() == MonsterState::DEAD) {
-                ProcessDeadMonster(mon, delta_time);
-                continue;
+                float old_x = mon->GetPosition().x;
+                float old_y = mon->GetPosition().y;
+
+                // 2. 상태별 처리
+                switch (mon->GetState()) {
+                case MonsterState::IDLE:
+                    ProcessIdleMonster(mon, old_x, old_y);
+                    break;
+                case MonsterState::CHASE:
+                    ProcessChaseMonster(mon, old_x, old_y);
+                    break;
+                case MonsterState::ATTACK:
+                    ProcessAttackMonster(mon, old_x, old_y);
+                    break;
+                default:
+                    break;
+                }
+
+                // 3. AI 업데이트 (이동) — game_strand_에서 실행되므로 스레드 안전
+                mon->Update(delta_time);
+
+                // 4. 위치 동기화
+                SyncMonsterPosition(mon, old_x, old_y, delta_time);
             }
 
-            float old_x = mon->GetPosition().x;
-            float old_y = mon->GetPosition().y;
-
-            // 2. 상태별 처리
-            switch (mon->GetState()) {
-            case MonsterState::IDLE:
-                ProcessIdleMonster(mon, old_x, old_y);
-                break;
-            case MonsterState::CHASE:
-                ProcessChaseMonster(mon, old_x, old_y);
-                break;
-            case MonsterState::ATTACK:
-                ProcessAttackMonster(mon, old_x, old_y);
-                break;
-            default:
-                break;
-            }
-
-            // 3. AI 업데이트 (이동)
-            mon->Update(delta_time);
-
-            // 4. 위치 동기화
-            SyncMonsterPosition(mon, old_x, old_y, delta_time);
-        }
-
-        ScheduleNextAITick();
-    });
+            ScheduleNextAITick();
+        })
+    );
 }
 
 void StartAITickThread() {
@@ -376,5 +351,5 @@ void StartAITickThread() {
     g_last_ai_time = std::chrono::steady_clock::now();
 
     ScheduleNextAITick();
-    LOG_INFO("MonsterManager", "비동기 Strand 기반 AI 타이머 루프 가동 시작 (10 FPS)");
+    LOG_INFO("MonsterManager", "비동기 game_strand_ 기반 AI 타이머 루프 가동 시작 (10 FPS)");
 }

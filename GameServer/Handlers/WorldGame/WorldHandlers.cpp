@@ -5,9 +5,9 @@
 #include "../../../Common/Utils/Logger.h"
 
 #include <iostream>
-#include <shared_mutex>
 #include <boost/asio/post.hpp>
 
+// [수정] game_strand_ 기반으로 동작하므로 뮤텍스 불필요
 void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char* payload, uint16_t payloadSize) {
     auto req = std::make_shared<Protocol::WorldGameMonsterBuffReq>();
 
@@ -18,9 +18,7 @@ void Handle_WorldGameMonsterBuff(std::shared_ptr<WorldConnection>& session, char
 
     auto& ctx = GameContext::Get();
 
-    // [수정] UTILITY::WriteLock 타입으로 통일 — monsterMutex_ 쓰기 락: 몬스터 체력 변경
-    UTILITY::WriteLock w_lock(ctx.monsterMutex_);
-
+    // [수정] game_strand_에서 실행되므로 monsterMutex_ 불필요
     uint64_t min_uid = req->min_uid();
     uint64_t max_uid = req->max_uid();
     int32_t add_hp   = req->add_hp();
@@ -56,7 +54,7 @@ void Handle_WorldGameTokenNotify(std::shared_ptr<WorldConnection>& session, char
         return;
     }
 
-    LOG_INFO("GameServer", "토큰 통지 수신 → GatewayServer로 중계 (유저: " << notify.account_id() << ")");
+    LOG_INFO("GameServer", "토큰 통지 수신 -> GatewayServer로 중계 (유저: " << notify.account_id() << ")");
 
     // 연결된 모든 GatewaySession에 토큰을 중계
     auto& ctx = GameContext::Get();

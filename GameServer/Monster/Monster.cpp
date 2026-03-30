@@ -1,6 +1,6 @@
 ﻿#include "Monster.h"
-#include "../GameServer.h" // ★ [추가] GameContext 접근용
-#include "../../Common/Define/GameConstants.h" // ★ [추가] 상수 정의
+#include "../GameServer.h" // GameContext 접근용
+#include "../../Common/Define/GameConstants.h" // 상수 정의
 #include <iostream>
 #include <boost/asio.hpp>
 
@@ -170,7 +170,15 @@ void Monster::UpdateAttack(float delta_time) {
 }
 
 // ==========================================
-// [수정] 길찾기 연산 비동기 처리 (버전 검증으로 Race Condition 방지)
+// [수정] 길찾기 연산 비동기 처리 - 결과 콜백을 game_strand_에 post
+//
+// 변경 전: 결과 콜백을 io_context에 post
+//   -> io_context의 아무 워커 스레드에서 몬스터 상태를 변경
+//   -> Monster의 position_, current_path_ 등에 대한 Race Condition 위험
+//
+// 변경 후: 결과 콜백을 game_strand_에 post
+//   -> 패킷 핸들러, AI Tick과 동일한 strand에서 실행
+//   -> 몬스터 상태 변경이 직렬화되어 Race Condition 원천 제거
 // ==========================================
 void Monster::CalculatePath() {
     if (!navmesh_) return;
@@ -180,20 +188,21 @@ void Monster::CalculatePath() {
     Vector3 end_pos = target_last_pos_;
     NavMesh* current_nav = navmesh_;
 
-    // ★ [핵심] 요청 시점의 버전 번호를 증가시키고 캡처합니다.
+    // [핵심] 요청 시점의 버전 번호를 증가시키고 캡처합니다.
     uint64_t request_version = ++path_request_version_;
     MonsterState request_state = state_;  // 요청 시점의 상태도 캡처
 
-    // 1. 메인 스레드(Strand) -> AI 스레드 풀(GameContext)에 무거운 작업 위임
+    // 1. AI 스레드 풀에 무거운 길찾기 연산 위임
     boost::asio::post(GameContext::Get().ai_io_context, [self, start_pos, end_pos, current_nav, request_version, request_state]() {
 
         std::vector<Vector3> result_waypoints = current_nav->FindPath(start_pos, end_pos);
 
-        // 2. 연산이 끝나면, 메인 게임 Strand(GameContext)로 결과 보고
-        boost::asio::post(GameContext::Get().io_context, [self, result_waypoints, request_version, request_state]() {
+        // 2. [수정] 결과를 game_strand_에 post (기존: io_context에 post)
+        //    game_strand_에서 실행되므로 몬스터 상태 변경이 스레드 안전
+        boost::asio::post(GameContext::Get().game_strand_, [self, result_waypoints, request_version, request_state]() {
 
             // =========================================================
-            // ★ [Race Condition 방지] 버전 검증
+            // [Race Condition 방지] 버전 검증
             // 비동기 결과가 도착했을 때, 요청 당시의 버전과 현재 버전이 다르면
             // 이미 새로운 경로 요청이 발생한 것이므로 이 결과는 무시합니다.
             // =========================================================
@@ -205,7 +214,7 @@ void Monster::CalculatePath() {
             // 상태가 DEAD로 바뀌었으면 무시
             if (self->state_ == MonsterState::DEAD) return;
 
-            // ★ [추가] 상태가 변경되었으면 무시 (CHASE 요청했는데 RETURN으로 바뀐 경우 등)
+            // 상태가 변경되었으면 무시 (CHASE 요청했는데 RETURN으로 바뀐 경우 등)
             // 단, CHASE -> ATTACK은 허용 (추적 중 공격 사거리 진입)
             if (request_state != self->state_ && 
                 !(request_state == MonsterState::CHASE && self->state_ == MonsterState::ATTACK)) {

@@ -3,9 +3,8 @@
 #include <vector>
 #include <cstdint>
 #include <functional> // 콜백 함수 사용을 위함
-#include <memory>     // ★ 비동기 콜백 시 생명주기 보장을 위함
-#include <mutex>
-#include <atomic>     // ★ [추가] 경로 계산 버전 관리용
+#include <memory>     // 비동기 콜백 시 생명주기 보장을 위함
+#include <atomic>     // [추가] 경로 계산 버전 관리용
 
 /* 
 * Monster 수정 (안전망 추가) : Monster 객체가 비동기 작업 중에도 스스로 수명을 연장할 수 있도록
@@ -21,12 +20,21 @@ enum class MonsterState {
     DEAD    // [추가] 몬스터가 유저에게 맞아 체력이 0된 상태
 };
 
-// ★ std::enable_shared_from_this 상속 추가 (비동기 람다 안에서 self 잡기 위함)
+// ==========================================
+// [수정] 몬스터 개별 뮤텍스(mtx_) 제거
+//
+// 변경 전: mutable std::mutex mtx_로 TakeDamage, Die, GetHp, SetHp 보호
+//   -> 여러 워커 스레드에서 동시 접근 가능하여 필요했음
+//
+// 변경 후: game_strand_가 모든 게임 로직(핸들러 + AI Tick)을 직렬화
+//   -> Monster 멤버에 대한 동시 접근이 원천적으로 불가능
+//   -> 개별 뮤텍스 불필요, 제거하여 코드 단순화 및 성능 향상
+// ==========================================
+
+// std::enable_shared_from_this 상속 추가 (비동기 람다 안에서 self 잡기 위함)
 class Monster : public std::enable_shared_from_this<Monster> {
 
 private:
-    mutable std::mutex mtx_;    // ☆ [추가] 몬스터 개별 락 (Fine-grained Lock) ★
-
     uint64_t monster_id_;
     Vector3 position_;
     Vector3 spawn_position_; // [추가] 몬스터가 원래 태어난 고향 좌표
@@ -39,7 +47,7 @@ private:
     std::vector<Vector3> current_path_;     // 현재 이동 경로 데이터
     int path_index_;
 
-    // ★ [추가] 경로 계산 버전 번호 (Race Condition 방지)
+    // [추가] 경로 계산 버전 번호 (Race Condition 방지)
     // 비동기 길찾기 결과가 도착했을 때, 요청 당시의 버전과 현재 버전을 비교하여
     // 오래된 결과는 무시합니다.
     std::atomic<uint64_t> path_request_version_{ 0 };
@@ -88,44 +96,32 @@ public:
     }
 
     // =========================================================
-    // ★ [추가] 유저 -> 몬스터 타격(전투)을 위한 Getter 및 사망 로직
+    // [수정] game_strand_ 직렬화에 의해 보호되므로 뮤텍스 제거
     // =========================================================
-    int GetHp() const {
-        std::lock_guard<std::mutex> lock(mtx_);
-        return hp_;
-    }
-    int SetHp(int par_hp) {
-        std::lock_guard<std::mutex> lock(mtx_);
-        return hp_ += par_hp;
-    }
-
+    int GetHp() const { return hp_; }
+    int SetHp(int par_hp) { return hp_ += par_hp; }
     int GetAtk() const { return attack_power_; }
     int GetDef() const { return defense_power_; }
 
-    
-
-    // 피격 시 체력 차감 함수
+    // [수정] 피격 시 체력 차감 함수 (뮤텍스 제거 — game_strand_ 보호)
     int TakeDamage(int damage) {
-        std::lock_guard<std::mutex> lock(mtx_); // ★ 데미지 입을 때 락
         hp_ -= damage;
         if (hp_ < 0) hp_ = 0;
-
         return hp_;
     }
 
-    // 사망 처리
+    // [수정] 사망 처리 (뮤텍스 제거 — game_strand_ 보호)
     void Die() {
-        std::lock_guard<std::mutex> lock(mtx_); // ★ 죽을 때 락
         hp_ = 0;
         state_ = MonsterState::DEAD;
-        path_request_version_++;  // ★ [추가] 대기 중인 경로 요청 무효화
+        path_request_version_++;  // [추가] 대기 중인 경로 요청 무효화
     }
     // =========================================================
 
     // 서버 Tick 마다 호출될 업데이트 함수 선언
     void Update(float delta_time);
 
-    // ★ [추가] JSON 데이터를 적용하기 위한 Setter 및 부활 함수
+    // JSON 데이터를 적용하기 위한 Setter 및 부활 함수
     void SetMaxHp(int hp) { max_hp_ = hp; hp_ = hp; }
     void SetRespawnSec(int sec) { respawn_sec_ = sec; }
     int GetRespawnSec() const { return respawn_sec_; }
@@ -139,7 +135,7 @@ public:
         position_ = spawn_position_;
         dead_timer_ = 0.0f;
         target_user_id_ = 0;
-        path_request_version_++;  // ★ [추가] 경로 버전 증가로 이전 요청 무효화
+        path_request_version_++;  // 경로 버전 증가로 이전 요청 무효화
         if (!current_path_.empty()) current_path_.clear();
     }
 

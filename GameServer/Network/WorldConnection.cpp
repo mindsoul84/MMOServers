@@ -1,6 +1,7 @@
 ﻿#include "WorldConnection.h"
 #include "..\GameServer\GameServer.h"
 #include "../../Common/MemoryPool.h"
+#include "../../Common/Utils/Logger.h"
 #include <iostream>
 
 using boost::asio::ip::tcp;
@@ -8,7 +9,7 @@ using boost::asio::ip::tcp;
 WorldConnection::WorldConnection(boost::asio::io_context& io_context)
     : socket_(io_context)
     , io_context_(io_context)
-    , strand_(io_context)   // ★ [버그 픽스] strand_ 초기화
+    , strand_(io_context)   // [버그 픽스] strand_ 초기화
 {}
 
 void WorldConnection::Connect(const std::string& ip, short port) {
@@ -21,24 +22,24 @@ void WorldConnection::Connect(const std::string& ip, short port) {
             if (!ec) {
                 try {
                     unsigned short my_port = socket_.local_endpoint().port();
-                    std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다! (내 부여된 포트: " << my_port << ")\n";
+                    LOG_INFO("GameServer", "WorldServer(7000)와 성공적으로 연결되었습니다! (내 부여된 포트: " << my_port << ")");
                 }
                 catch (...) {
-                    std::cout << "[GameServer] WorldServer(7000)와 성공적으로 연결되었습니다!\n";
+                    LOG_INFO("GameServer", "WorldServer(7000)와 성공적으로 연결되었습니다!");
                 }
                 ReadHeader();
             }
             else {
-                std::cerr << "🚨 [GameServer] WorldServer 연결 실패\n";
+                LOG_ERROR("GameServer", "WorldServer 연결 실패");
             }
         });
 }
 
 // ==========================================
-// ★ [버그 픽스] Send() - strand + send_queue 패턴 적용
+// [버그 픽스] Send() - strand + send_queue 패턴 적용
 //
-// 변경 전: async_write 직접 호출 → 동시 Send() 시 소켓 오염 가능
-// 변경 후: strand_에 post → DoWrite()로 순차 전송
+// 변경 전: async_write 직접 호출 -> 동시 Send() 시 소켓 오염 가능
+// 변경 후: strand_에 post -> DoWrite()로 순차 전송
 // ==========================================
 void WorldConnection::Send(uint16_t pktId, const google::protobuf::Message& msg) {
     if (!socket_.is_open()) return;
@@ -50,8 +51,8 @@ void WorldConnection::Send(uint16_t pktId, const google::protobuf::Message& msg)
     // 버퍼 크기 초과 시 서버 죽지 않도록 에러 로그만 띄우고 취소
     // =========================================================
     if (totalSize > MAX_PACKET_SIZE) {
-        std::cerr << "🚨 [Error] 패킷 크기 초과! (PktID: " << pktId
-            << ", Size: " << totalSize << " bytes) - 전송 취소\n";
+        LOG_ERROR("GameServer", "패킷 크기 초과! (PktID: " << pktId
+            << ", Size: " << totalSize << " bytes) - 전송 취소");
         return;
     }
 
@@ -80,16 +81,21 @@ void WorldConnection::DoWrite() {
                 if (!send_queue_.empty()) DoWrite();
             }
             else {
-                std::cerr << "[GameServer] WorldServer로 패킷 전송 실패 (DoWrite): " << ec.message() << "\n";
+                LOG_ERROR("GameServer", "WorldServer로 패킷 전송 실패 (DoWrite): " << ec.message());
                 send_queue_.clear();
             }
         }));
 }
 
+// ==========================================
+// [수정] ReadHeader/ReadPayload - game_strand_에 디스패치
+//
+// 변경 전: I/O 워커 스레드에서 직접 worldDispatcher.Dispatch() 호출
+// 변경 후: game_strand_에 post하여 게임 로직과 동일 스레드에서 처리
+// ==========================================
 void WorldConnection::ReadHeader() {
     auto self(shared_from_this());
 
-    // 내부 람다에서 사용할 임시 헤더 버퍼 (동적 할당 피하기 위해 공유 포인터 사용)
     auto header_buf = std::make_shared<PacketHeader>();
 
     boost::asio::async_read(socket_, boost::asio::buffer(header_buf.get(), sizeof(PacketHeader)),
@@ -97,22 +103,27 @@ void WorldConnection::ReadHeader() {
             if (!ec) {
                 if (header_buf->size < sizeof(PacketHeader) || header_buf->size > 4096) return;
 
-                current_header_id_ = header_buf->id;
-                current_payload_size_ = static_cast<uint16_t>(header_buf->size - sizeof(PacketHeader));
+                uint16_t pkt_id = header_buf->id;
+                uint16_t payload_size = static_cast<uint16_t>(header_buf->size - sizeof(PacketHeader));
 
-                if (current_payload_size_ == 0) {
-                    auto session_ptr = self;
-                    // [수정] GameContext의 월드 디스패처 사용
-                    GameContext::Get().worldDispatcher.Dispatch(session_ptr, current_header_id_, nullptr, 0);
+                if (payload_size == 0) {
+                    // [수정] game_strand_에 디스패치
+                    boost::asio::post(GameContext::Get().game_strand_, [self, pkt_id]() {
+                        auto session_ptr = self;
+                        GameContext::Get().worldDispatcher.Dispatch(session_ptr, pkt_id, nullptr, 0);
+                    });
                     ReadHeader();
                 }
                 else {
-                    payload_buf_.resize(current_payload_size_);
+                    // pkt_id와 payload_size를 멤버 변수에 저장 (ReadPayload에서 사용)
+                    current_header_id_ = pkt_id;
+                    current_payload_size_ = payload_size;
+                    payload_buf_.resize(payload_size);
                     ReadPayload();
                 }
             }
             else {
-                std::cerr << "[GameServer] 🚨 WorldServer와의 연결이 끊어졌습니다.\n";
+                LOG_ERROR("GameServer", "WorldServer와의 연결이 끊어졌습니다.");
             }
         });
 }
@@ -122,13 +133,23 @@ void WorldConnection::ReadPayload() {
     boost::asio::async_read(socket_, boost::asio::buffer(payload_buf_.data(), current_payload_size_),
         [this, self](boost::system::error_code ec, std::size_t length) {
             if (!ec) {
-                auto session_ptr = self;
-                // [수정] GameContext의 월드 디스패처 사용
-                GameContext::Get().worldDispatcher.Dispatch(session_ptr, current_header_id_, payload_buf_.data(), current_payload_size_);
+                // [수정] 페이로드 복사 후 game_strand_에 디스패치
+                auto payload_copy = std::make_shared<std::vector<char>>(
+                    payload_buf_.begin(), payload_buf_.begin() + current_payload_size_);
+                uint16_t pkt_id = current_header_id_;
+                uint16_t pay_size = current_payload_size_;
+
+                boost::asio::post(GameContext::Get().game_strand_,
+                    [self, pkt_id, payload_copy, pay_size]() {
+                        auto session_ptr = self;
+                        GameContext::Get().worldDispatcher.Dispatch(
+                            session_ptr, pkt_id, payload_copy->data(), pay_size);
+                    });
+
                 ReadHeader();
             }
             else {
-                std::cerr << "[GameServer] 🚨 WorldServer와의 연결이 끊어졌습니다.\n";
+                LOG_ERROR("GameServer", "WorldServer와의 연결이 끊어졌습니다.");
             }
         });
 }
