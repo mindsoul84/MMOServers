@@ -1,0 +1,237 @@
+﻿[v1.1.3 수정 요약]
+
+[수정사항]
+1. Sector 뮤텍스 제거 → 디버그 빌드 동시 접근 감지(assertion)로 대체
+2. S2S 재연결 시 수신 상태 초기화 + async_read 완전 수신 보장 주석 추가
+3. thread_local DBManager → DBConnectionPool (연결 풀링) 도입
+4. PacketCrypto 실제 통신 경로 통합 (AES-128-CBC 암호화 파이프라인 완성)
+
+================================================================================
+1. Sector 뮤텍스 제거 → 디버그 빌드 동시 접근 감지
+================================================================================
+
+  수정 파일: GameServer/Zone/Zone.h, GameServer/Zone/Zone.cpp
+
+  [문제]
+  game_strand_가 모든 게임 로직(패킷 핸들러, AI Tick, 경로 계산 콜백)을
+  직렬화하고 있으므로 Sector에 대한 동시 접근이 원천적으로 불가능함.
+  기존 UTILITY::Lock(shared_timed_mutex) 뮤텍스는 불필요한 오버헤드만 발생.
+
+  [수정]
+  (1) Sector의 mutable UTILITY::Lock mutex_ 멤버 완전 제거
+  (2) 모든 AddPlayer/RemovePlayer/GetPlayers 등에서 WriteLock/ReadLock 제거
+  (3) Lock.h 의존성 제거 (Zone에서 더 이상 사용하지 않음)
+
+  (4) 디버그 빌드(NDEBUG 미정의)에서만 동작하는 SectorAccessGuard RAII 클래스 추가
+      - std::atomic<int> concurrent_access_count_ 카운터를 사용
+      - 동일 Sector에 두 스레드가 동시 진입하면 assert 실패로 즉시 감지
+      - 릴리즈 빌드(NDEBUG 정의)에서는 모든 검증 코드가 컴파일에서 제거됨
+        -> 제로 오버헤드
+
+  [효과]
+  - 릴리즈 빌드: 뮤텍스 비용 완전 제거 (shared_lock/unique_lock 0회)
+  - 디버그 빌드: strand 직렬화 위반을 런타임에 자동 감지
+  - game_strand_ 전제 조건이 코드 수준에서 검증 가능해짐
+
+================================================================================
+2. S2S 재연결 시 수신 상태 초기화 + async_read 보장 주석
+================================================================================
+
+  수정 파일: GatewayServer/Network/GameConnection.cpp,
+             LoginServer/Network/WorldConnection.cpp,
+             GameServer/Network/WorldConnection.cpp
+
+  [문제 1: 재연결 시 수신 상태 오염]
+  ScheduleRetry()에서 send_queue만 초기화하고 header_와 payload_buf_를
+  리셋하지 않았음. 이전 연결에서 수신 중이던 패킷의 부분 데이터가
+  header_에 남아있으면, 새 연결의 첫 ReadHeader에서 잘못된 패킷 크기를
+  파싱하여 프로토콜 오류가 발생할 수 있었음.
+
+  [수정]
+  ScheduleRetry()에 다음 코드 추가:
+    std::memset(&header_, 0, sizeof(PacketHeader));
+    payload_buf_.clear();
+
+  적용 대상:
+    - GatewayServer/Network/GameConnection::ScheduleRetry()
+    - LoginServer/Network/WorldConnection::ScheduleRetry()
+  (GameServer/Network/WorldConnection은 재연결 로직이 없으므로 해당 없음)
+
+  [문제 2: TCP 분할 수신에 대한 명시적 설명 부재]
+  PacketHeader(4바이트)가 TCP 세그먼트 경계에 걸쳐 분할 수신될 수 있는
+  상황에 대한 방어가 boost::asio::async_read의 composed operation 보장에
+  암묵적으로 의존하고 있었으나, 이에 대한 명시적 주석이 없었음.
+
+  [수정]
+  모든 ReadHeader()에 다음 주석 블록 추가:
+
+    // [참고] boost::asio::async_read의 완전 수신 보장 (composed operation)
+    //
+    // boost::asio::async_read는 요청한 바이트 수를 모두 수신할 때까지
+    // 내부적으로 async_read_some을 반복 호출합니다.
+    // TCP 스트림에서 PacketHeader(4바이트)가 분할 수신되더라도,
+    // 콜백은 4바이트를 모두 받은 후에만 호출됩니다.
+
+  적용 대상: GameConnection, LoginServer WorldConnection,
+             GameServer WorldConnection, ClientSession
+
+================================================================================
+3. thread_local DBManager → DBConnectionPool (연결 풀링)
+================================================================================
+
+  신규 파일: Common/DB/DBConnectionPool.h, Common/DB/DBConnectionPool.cpp
+  수정 파일: LoginServer/LoginServer.h, LoginServer/LoginServer.cpp,
+             LoginServer/Handlers/ClientLogin/ClientHandlers.cpp
+
+  [문제]
+  thread_local std::unique_ptr<DBManager>로 DB 스레드마다 1개의
+  ODBC 연결을 보유하는 방식.
+    -> 스레드 수와 연결 수가 1:1로 고정 (독립 조절 불가)
+    -> DB 부하 급증 시 스레드를 늘려야 하지만 OS 스레드 비용이 큼
+    -> 연결 헬스체크나 풀 동적 확장 불가
+    -> 스레드 종료 시 수동 정리 필요 (t_dbManager.reset())
+
+  [수정]
+  DBConnectionPool 클래스 도입:
+
+  (1) DBConnectionPool 핵심 설계
+      - Initialize(pool_size): N개의 ODBC 연결을 사전 생성
+      - Acquire(timeout_ms): 사용 가능한 연결을 획득 (타임아웃 대기)
+      - ReturnConnection(): 사용 완료된 연결을 풀에 반납
+      - ScopedConnection RAII 래퍼: 스코프 종료 시 자동 반납 (누수 방지)
+
+  (2) LoginServer 적용
+      - LoginServer.h: LoginContext에 DBConnectionPool db_pool_ 멤버 추가
+      - LoginServer.cpp main():
+        a) DB 스레드 생성 전에 db_pool_.Initialize(db_thread_count * 2) 호출
+           -> 풀 크기를 스레드 수의 2배로 설정하여 동시 요청 여유분 확보
+        b) DB 스레드에서 thread_local DBManager 생성/해제 코드 제거
+           -> 스레드는 io_context.run()만 수행
+
+      - ClientHandlers.cpp Handle_LoginReq():
+        변경 전:
+          if (t_dbManager) {
+              LoginResult result = t_dbManager->ProcessLogin(...);
+          }
+        변경 후:
+          auto conn = ctx.db_pool_.Acquire(5000);  // 최대 5초 대기
+          if (!conn) { /* 풀 고갈 시 로그인 실패 응답 */ return; }
+          LoginResult result = conn->ProcessLogin(...);
+          // conn은 스코프 종료 시 자동 반납
+
+  [ScopedConnection 동작]
+  DBConnectionPool::Acquire()가 반환하는 ScopedConnection은
+  RAII 패턴으로 설계되어 있어:
+    1) 정상 흐름: 함수 종료 시 소멸자에서 ReturnConnection() 호출
+    2) 예외 발생: 스택 언와인딩 시에도 소멸자에서 자동 반납
+    3) 일찍 반환: if (!conn) return; 경로에서도 누수 없음
+  explicit operator bool()로 획득 실패 여부를 검사할 수 있음.
+
+  [기존 코드와의 호환]
+  GameServer에서는 기존 thread_local t_dbManager를 유지합니다.
+  GameServer는 DB 연결이 메인 스레드에서 1회만 사용되므로 풀링이 불필요합니다.
+  향후 GameServer에서도 DB 호출이 증가하면 동일한 풀 패턴을 적용할 수 있습니다.
+
+================================================================================
+4. PacketCrypto 실제 통신 경로 통합 (AES-128-CBC 암호화 완성)
+================================================================================
+
+  수정 파일: Common/Define/SecurityConstants.h,
+             GatewayServer/Session/ClientSession.h,
+             GatewayServer/Session/ClientSession.cpp,
+             GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp,
+             DummyClient/DummyClient.cpp,
+             DummyClient/Network/PacketUtils.h,
+             DummyClient/Network/PacketUtils.cpp,
+             StressTestTool/Session/StressSession.h,
+             StressTestTool/Session/StressSession.cpp
+
+  [문제]
+  PacketCrypto 클래스(AES-128-CBC + 시퀀스 번호)가 v1.1.2에서 추가되었으나,
+  실제 통신 경로(Send/ReadPayload)에 연동되지 않아 TCP 평문 통신이 유지됨.
+  클래스만 존재하고 사용되지 않는 상태.
+
+  [수정]
+  핸드셰이크 완료 후 암호화를 활성화하는 파이프라인 구현:
+
+  (1) 암호화 활성화 시점 (핸드셰이크 프로토콜)
+      a) 클라이언트가 GatewayConnectReq를 평문으로 전송
+      b) 서버가 토큰을 검증하고 GatewayConnectRes(success=true)를 평문으로 응답
+      c) 서버: session->EnableEncryption() 호출 → crypto_ 초기화, crypto_enabled_=true
+      d) 클라이언트: GatewayConnectRes 수신 후 동일 패스프레이즈로 crypto 초기화
+      e) 이후 양방향 모든 패킷이 AES-128-CBC로 암호화됨
+
+      LoginServer 통신은 암호화하지 않음 (인증 전 단계)
+      S2S(서버 간) 통신도 암호화하지 않음 (내부망, CryptoConstants::ENCRYPT_S2S=false)
+
+  (2) SecurityConstants에 SHARED_PASSPHRASE 추가
+      "MMOSERVER_AES128_SHARED_KEY_2025" 문자열을
+      SHA-256 해싱 후 앞 16바이트를 AES-128 키로 사용.
+
+      [주의] 사전 공유 키(PSK) 방식은 개발/테스트 환경 전용입니다.
+      프로덕션에서는 TLS 또는 Diffie-Hellman 키 교환을 통해
+      세션별 고유 키를 협상하는 것이 권장됩니다.
+
+  (3) GatewayServer ClientSession 수정
+      - ClientSession.h: PacketCrypto crypto_ 멤버 + crypto_enabled_ 플래그 추가
+      - ClientSession::EnableEncryption(): PSK로 PacketCrypto 초기화
+      - ClientSession::Send():
+        암호화 활성 시 Protobuf 직렬화 → crypto_.Encrypt() → 전송
+        PacketHeader.size에 암호화 오버헤드(SeqNum+IV+padding) 포함
+      - ClientSession::ReadPayload():
+        암호화 활성 시 수신 → crypto_.Decrypt() → Dispatch에 복호화된 데이터 전달
+
+  (4) ClientHandlers.cpp Handle_GatewayConnectReq 수정
+      토큰 검증 성공 → GatewayConnectRes 평문 응답 → session->EnableEncryption() 호출
+      이 순서가 중요: 핸드셰이크 응답은 반드시 평문으로 보내야 클라이언트가 수신 가능
+
+  (5) DummyClient 수정
+      - PacketUtils.h/cpp: SendPacket에 PacketCrypto* 선택 파라미터 추가
+        기본값 nullptr → 기존 호출부(LoginServer 통신) 하위 호환
+        유효한 crypto 전달 시 Encrypt 후 전송
+      - DummyClient.cpp:
+        전역 PacketCrypto g_crypto + g_crypto_enabled 플래그 추가
+        GatewayConnectRes 성공 수신 후 InitializeWithPassphrase() 호출
+        수신 스레드에서 g_crypto.Decrypt() 호출하여 복호화
+        RunActionLoop에서 SendPacket(..., &g_crypto) 전달
+
+  (6) StressTestTool 수정
+      - StressSession.h: PacketCrypto crypto_ + crypto_enabled_ 멤버 추가
+      - StressSession.cpp:
+        HandlePacket: GatewayConnectRes 성공 시 InitializeWithPassphrase()
+        SendPacket: crypto_enabled_ 시 Encrypt 후 전송
+        ReadPayload: crypto_enabled_ 시 Decrypt 후 HandlePacket에 전달
+        Stop(): crypto_enabled_=false로 초기화 (재접속 시 깨끗한 상태)
+
+  [암호화 패킷 구조]
+    핸드셰이크 전: [PacketHeader(4B)][Protobuf Payload(N)]
+    핸드셰이크 후: [PacketHeader(4B)][SeqNum(4B)][IV(16B)][EncryptedPayload(N+pad)]
+    PacketHeader.size는 항상 전체 크기를 포함
+
+================================================================================
+수정 파일 목록
+================================================================================
+
+[신규]
+  Common/DB/DBConnectionPool.h              — DB 연결 풀 + ScopedConnection RAII
+  Common/DB/DBConnectionPool.cpp            — DB 연결 풀 구현
+  ReleaseNotes/v1.1.3.txt                   — 이 파일
+
+[수정]
+  GameServer/Zone/Zone.h                    — 뮤텍스 제거, SectorAccessGuard 추가
+  GameServer/Zone/Zone.cpp                  — 락 코드 제거, 디버그 가드 적용
+  GatewayServer/Network/GameConnection.cpp  — ScheduleRetry 수신 상태 리셋, async_read 주석
+  LoginServer/Network/WorldConnection.cpp   — ScheduleRetry 수신 상태 리셋, async_read 주석
+  GameServer/Network/WorldConnection.cpp    — async_read 보장 주석 추가
+  LoginServer/LoginServer.h                 — DBConnectionPool 멤버 추가
+  LoginServer/LoginServer.cpp               — 풀 초기화, thread_local 제거
+  LoginServer/Handlers/ClientLogin/ClientHandlers.cpp — pool.Acquire() 사용
+  Common/Define/SecurityConstants.h         — SHARED_PASSPHRASE 추가
+  GatewayServer/Session/ClientSession.h     — PacketCrypto 멤버 추가
+  GatewayServer/Session/ClientSession.cpp   — Send/ReadPayload 암호화 통합
+  GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp — EnableEncryption 호출
+  DummyClient/DummyClient.cpp               — 클라이언트 암호화 파이프라인
+  DummyClient/Network/PacketUtils.h         — crypto 파라미터 추가
+  DummyClient/Network/PacketUtils.cpp       — 암호화 전송 구현
+  StressTestTool/Session/StressSession.h    — PacketCrypto 멤버 추가
+  StressTestTool/Session/StressSession.cpp  — 봇 암호화 파이프라인

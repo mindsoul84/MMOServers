@@ -1,0 +1,253 @@
+﻿syntax = "proto3";
+
+package Protocol;
+
+// =========================================================
+// 1. 패킷 ID 정의 (고유 식별자)
+// [송신자]_[수신자]_[액션]_[REQ/RES] 규칙을 따릅니다.
+// =========================================================
+enum PacketID {
+  PKT_UNKNOWN = 0;
+
+  // ---------------------------------------------------------
+  // [1~9] 공통 및 로그인 (Client <-> Login Server)
+  // ---------------------------------------------------------
+  PKT_CLIENT_LOGIN_LOGIN_REQ = 1;      // Client -> Login
+  PKT_LOGIN_CLIENT_LOGIN_RES = 2;      // Login -> Client
+  PKT_CLIENT_SERVER_HEARTBEAT = 7;     // Client -> Any Server
+
+  // ---------------------------------------------------------
+  // [10~19] 월드 선택 (Client <-> Login Server)
+  // ---------------------------------------------------------
+  PKT_CLIENT_LOGIN_WORLD_SELECT_REQ = 10; // Client -> Login
+  PKT_LOGIN_CLIENT_WORLD_SELECT_RES = 11; // Login -> Client
+
+  // ---------------------------------------------------------
+  // [20~29] 인게임 통신 (Client <-> Gateway Server)
+  // ---------------------------------------------------------
+  PKT_CLIENT_GATEWAY_CONNECT_REQ = 20; // Client -> Gateway
+  PKT_GATEWAY_CLIENT_CONNECT_RES = 21; // Gateway -> Client
+  
+  PKT_CLIENT_GATEWAY_CHAT_REQ = 22;    // Client -> Gateway
+  PKT_GATEWAY_CLIENT_CHAT_RES = 23;    // Gateway -> Client
+  
+  PKT_CLIENT_GATEWAY_MOVE_REQ = 24;    // Client -> Gateway
+  PKT_GATEWAY_CLIENT_MOVE_RES = 25;    // Gateway -> Client
+
+  // 전투 패킷 (Attack)
+  PKT_CLIENT_GATEWAY_ATTACK_REQ = 26;  // Client -> Gateway (나중에 유저가 때릴 때 사용)
+  PKT_GATEWAY_CLIENT_ATTACK_RES = 27;  // Gateway -> Client (몬스터에게 맞았을 때, 혹은 타격 결과)
+
+  // =========================================================
+  // [1000~] S2S 내부망 통신 (서버 간 방향성 명시)
+  // =========================================================
+  
+  // [Login Server <-> World Server]
+  PKT_LOGIN_WORLD_SELECT_REQ = 1010;   // Login -> World
+  PKT_WORLD_LOGIN_SELECT_RES = 1011;   // World -> Login
+
+  // [World Server <-> Game Server]
+  PKT_WORLD_GAME_MONSTER_BUFF = 1012;
+
+  // [Gateway Server <-> Game Server]
+  PKT_GATEWAY_GAME_MOVE_REQ = 1024;    // Gateway -> Game (이동 패킷 토스)
+  PKT_GAME_GATEWAY_MOVE_RES = 1025;    // Game -> Gateway (브로드캐스트 지시)
+  PKT_GATEWAY_GAME_LEAVE_REQ = 1026;   // Gateway -> Game (접속 종료 알림)
+
+  // S2S 전투 패킷 (Attack)
+  PKT_GATEWAY_GAME_ATTACK_REQ = 1027;  // Gateway -> Game (유저의 공격 요청 토스)
+  PKT_GAME_GATEWAY_ATTACK_RES = 1028;  // Game -> Gateway (전투 결과 브로드캐스트 지시)
+
+  // ---------------------------------------------------------
+  //   세션 토큰 검증 (World -> Game -> Gateway 릴레이)
+  // ---------------------------------------------------------
+  PKT_WORLD_GAME_TOKEN_NOTIFY = 1030;    // World -> Game (토큰 발급 통지)
+  PKT_GAME_GATEWAY_TOKEN_NOTIFY = 1031;  // Game -> Gateway (토큰 발급 전달)
+
+  // ---------------------------------------------------------
+  //   채팅 AOI (Gateway <-> Game)
+  // ---------------------------------------------------------
+  PKT_GATEWAY_GAME_CHAT_REQ = 1032;    // Gateway -> Game (채팅을 AOI 처리 요청)
+  PKT_GAME_GATEWAY_CHAT_RES = 1033;    // Game -> Gateway (AOI 대상 목록과 함께 응답)
+}
+
+// =========================================================
+// 2. 공통 및 로그인 패킷
+// =========================================================
+message Heartbeat { }
+
+message LoginReq {
+  string id = 1;
+  string password = 2;
+  int32 input_type = 3;    // 0: random, 1:input
+}
+
+message LoginRes {
+  bool success = 1;
+}
+
+// =========================================================
+// 3. 월드 선택 패킷
+// =========================================================
+message WorldSelectReq {
+  int32 world_id = 1; 
+}
+
+message WorldSelectRes {
+  bool success = 1;
+  string gateway_ip = 2;
+  int32 gateway_port = 3;
+  string session_token = 4;
+}
+
+// =========================================================
+// 4. 게이트웨이 및 인게임 패킷
+// =========================================================
+message GatewayConnectReq {
+  string account_id = 1;
+  string session_token = 2; 
+}
+
+message GatewayConnectRes {
+  bool success = 1;
+  string reason = 2; //   실패 사유 전달용
+}
+
+message ChatReq {
+  string msg = 1;
+}
+
+message ChatRes {
+  string account_id = 1; 
+  string msg = 2;
+}
+
+message MoveReq {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float yaw = 4; 
+}
+
+message MoveRes {
+  string account_id = 1; 
+  float x = 2;
+  float y = 3;
+  float z = 4;
+  float yaw = 5;
+}
+
+message AttackReq {
+  uint64 target_uid = 1;
+}
+
+message AttackRes {
+  uint64 attacker_uid = 1;
+  string target_account_id = 2; // DummyClient에서 내 아이디와 비교할 필드
+  int32 damage = 3;
+  int32 target_remain_hp = 4;
+}
+
+// =========================================================
+// 5. 서버 간 내부 통신 (S2S) 패킷 구조체
+// 메시지 이름도 방향성에 맞춰 통일합니다.
+// =========================================================
+
+// ---------------------------------------------------------
+// [Login Server <-> World Server]
+// ---------------------------------------------------------
+message LoginWorldSelectReq {
+  string account_id = 1; 
+  int32 world_id = 2;
+}
+
+message WorldLoginSelectRes {
+  string account_id = 1; 
+  bool success = 2;
+  string gateway_ip = 3;
+  int32 gateway_port = 4;
+  string session_token = 5;
+}
+
+// ---------------------------------------------------------
+// World Server -> Game Server
+// ---------------------------------------------------------
+message WorldGameMonsterBuffReq {
+  uint64 min_uid = 1; // 시작 몬스터 UID (예: 10000)
+  uint64 max_uid = 2; // 끝 몬스터 UID (예: 10002)
+  int32 add_hp = 3;   // 올려줄 체력량
+}
+
+// ---------------------------------------------------------
+//   세션 토큰 통지 (World -> Game -> Gateway)
+//
+// WorldServer에서 토큰 발급 시, 기존 S2S 경로를 통해
+// GameServer를 거쳐 GatewayServer에 토큰을 전달합니다.
+// GatewayServer는 이 정보로 클라이언트의 접속 요청을 검증합니다.
+// ---------------------------------------------------------
+message TokenNotify {
+  string account_id = 1;
+  string session_token = 2;
+  int64 expire_time_ms = 3; // 만료 시각 (epoch ms)
+}
+
+// ---------------------------------------------------------
+// [Gateway Server <-> Game Server]
+// ---------------------------------------------------------
+message GatewayGameMoveReq {
+  string account_id = 1; 
+  float x = 2;
+  float y = 3;
+  float z = 4;
+  float yaw = 5;
+}
+
+message GameGatewayMoveRes {
+  string account_id = 1; 
+  float x = 2;
+  float y = 3;
+  float z = 4;
+  float yaw = 5;
+  repeated string target_account_ids = 6; 
+}
+
+message GatewayGameLeaveReq {
+  string account_id = 1; 
+}
+
+//   전투(공격) 패킷 정의
+// S2C (게임서버 -> 게이트웨이 -> 클라이언트 브로드캐스트)
+message GameGatewayAttackRes {
+    uint64 attacker_uid = 1;     // 공격자 (몬스터 UID)
+    uint64 target_uid = 2;       // 피격자 (유저 UID)
+    int32 damage = 3;            // 입힌 데미지
+    int32 target_remain_hp = 4;  // 피격자의 남은 체력
+    repeated string target_account_ids = 5; // 이펙트를 볼 주변(AOI) 유저들
+    string target_account_id = 6; // 클라이언트에게 누구 맞았는지 알려주기 위한 필드 추가
+}
+
+// ---------------------------------------------------------
+//   유저 -> 몬스터 타격(전투) 요청 패킷 (S2S)
+// ---------------------------------------------------------
+message GatewayGameAttackReq {
+  string account_id = 1;     // 공격을 요청한 유저의 ID
+  uint64 target_uid = 2;     // (선택) 클라이언트가 명시한 타겟 몬스터 UID
+}
+
+// ---------------------------------------------------------
+//   채팅 AOI (Gateway <-> Game)
+//
+// 채팅을 AOI 기반으로 처리하기 위한 S2S 패킷입니다.
+// Gateway가 채팅을 Game에 토스하면, Game이 AOI 내 유저 목록을
+// 함께 반환하여 Gateway가 해당 유저들에게만 전달합니다.
+// ---------------------------------------------------------
+message GatewayGameChatReq {
+  string account_id = 1;
+  string msg = 2;
+}
+
+message GameGatewayChatRes {
+  string account_id = 1;
+  string msg = 2;
+  repeated string target_account_ids = 3;
+}

@@ -1,0 +1,66 @@
+ㆍ현재 전체 서버코드 mutex 사용 전수 조사
+
+[GameServer]
+gatewaySessionMutex (std::mutex)
+- 쓰기 경로: accept 콜백(I/O 스레드)에서 gatewaySessions.insert(), OnDisconnected에서 gatewaySessions.erase()
+- 읽기 경로: BroadcastToGateways()에서 gatewaySessions를 순회하며 Send 호출
+- 접근 패턴 분석: BroadcastToGateways는 game_strand_에서 호출됩니다.
+game_strand_는 단일 스레드이므로 읽기 측에서 동시 접근이 발생하지 않습니다.
+즉 "동시 읽기"가 존재하지 않으므로 shared_lock의 이점이 없습니다. accept과 game_strand_ 사이의 단순한 상호 배제만 필요합니다.
+
+[GatewayServer]
+clientMutex (std::mutex)
+- 쓰기 경로: Handle_GatewayConnectReq에서 clientMap[id] = session, OnDisconnected에서 clientMap.erase(id)
+- 읽기 경로: Handle_MoveRes_FromGame, Handle_GameGatewayAttackRes, Handle_ChatRes_FromGame에서 clientMap을 순회하며 대상 세션을 찾아 Send 호출
+- 접근 패턴 분석: GatewayServer에는 game_strand_가 없습니다.
+io_context.run()을 4개 워커 스레드에서 호출하며, 모든 핸들러가 이 워커 스레드 중 아무 곳에서 실행됩니다.
+3000봇 환경에서 이동/공격/채팅 응답이 초당 수천 회 발생하면, 4개 스레드가 동시에 clientMap을 읽으려 할 수 있습니다. 이론적으로는 shared_lock의 후보입니다.
+tokenMutex (std::mutex)
+- 쓰기 경로: StorePendingToken에서 토큰 추가
+- 읽기+쓰기: VerifyAndConsumeToken에서 조회 후 삭제 (일회용 소비이므로 항상 쓰기)
+- 접근 패턴 분석: VerifyAndConsumeToken이 조회와 삭제를 한 번에 수행하므로 사실상 모든 접근이 쓰기입니다. shared_lock이 무의미합니다.
+
+[LoginServer]
+loginMutex (std::mutex)
+- 쓰기 경로: Handle_LoginReq의 DB 콜백에서 loggedInUsers.insert(), sessionMap[id] = session. OnDisconnected에서 erase.
+- 읽기 경로: Handle_S2SWorldSelectRes에서 sessionMap.find()
+- 접근 패턴 분석: 읽기(월드 선택 응답)와 쓰기(로그인/로그아웃)가 비슷한 빈도로 발생합니다. 읽기 우세가 아니므로 shared_lock의 이점이 없습니다.
+
+[WorldServer]
+g_serverSessionMutex (std::mutex)
+- 쓰기 경로: accept에서 g_serverSessions.push_back()
+- 읽기 경로: AdminServiceImpl::BuffMonsterHp(gRPC 스레드)에서 순회, Handle_WorldLoginSelectReq에서 순회하여 TokenNotify 전송
+- 접근 패턴 분석: 서버 세션은 2~3개(LoginServer, GameServer)로 극소수입니다. 접근 빈도도 낮습니다. 어떤 뮤텍스를 써도 성능 차이가 없습니다.
+공용 컴포넌트
+RedisManager::mutex_ — hiredis redisContext 보호. 모든 호출이 배타적 접근 필요 (hiredis 자체가 스레드 안전하지 않음).
+Logger::s_mutex_ — 콘솔/파일 출력 직렬화. 모든 접근이 쓰기.
+DBConnectionPool::mutex_ — 풀 큐 접근. Acquire(pop)와 Return(push) 모두 쓰기.
+PacketCrypto::crypto_mutex_ — BCrypt 핸들 보호. Encrypt/Decrypt 모두 내부 상태 변경.
+
+[핵심 판단 기준] : shared_mutex가 이점을 주는 조건
+shared_mutex가 std::mutex보다 나은 상황은 다음 세 가지 조건이 모두 충족될 때입니다:
+첫째, 읽기가 쓰기보다 압도적으로 많아야 합니다 (10:1 이상).
+둘째, 여러 스레드가 실제로 동시에 읽기를 시도해야 합니다.
+셋째, 임계 구역(critical section)이 충분히 길어야 합니다.
+shared_mutex 자체의 락/언락 비용이 std::mutex보다 높기 때문에, 임계 구역이 짧으면 동시 읽기의 이점이 오버헤드에 상쇄됩니다.
+
+[분석 결과]
+현재 코드의 모든 뮤텍스 사용 지점을 위 기준으로 평가하면:
+GatewayServer clientMutex만이 첫째와 둘째 조건을 충족합니다. 읽기(이동/공격/채팅 응답 처리)가 쓰기(접속/해제)보다 압도적으로 많고, 4개 I/O 워커 스레드가 동시에 읽기를 시도할 수 있습니다.
+그러나 셋째 조건을 충족하지 못합니다. 임계 구역은 clientMap.find(target_id) → session->Send() 입니다.
+unordered_map의 find는 O(1)이고, Send는 strand에 post하는 것이라 즉시 반환합니다. 전체 임계 구역이 수백 나노초 수준입니다.
+shared_mutex의 락/언락 오버헤드(atomic CAS + 가능한 커널 콜)가 이 이점을 상쇄합니다.
+나머지 모든 지점은 세 조건 중 하나 이상을 충족하지 못합니다.
+
+
+[결론] : std::mutex로 통일하는 것이 맞습니다. 이유는 세 가지입니다.
+
+첫째, 성능 관점입니다. 현재 코드의 모든 임계 구역이 마이크로초 이하로 짧습니다. 이 범위에서는 std::mutex가 shared_mutex보다 락/언락 비용이 낮아 더 빠릅니다.
+shared_mutex는 내부적으로 atomic 연산과 condition_variable을 조합하여 구현되어 있어 단순 배타 락보다 오버헤드가 큽니다.
+
+둘째, 설계 원칙과의 일관성입니다. "게임 로직은 싱글 스레드(strand), I/O는 멀티스레드"라는 원칙 하에서, 뮤텍스는 strand와 비-strand 경계(세션 라이프사이클 관리) 또는 
+strand가 없는 서버(GatewayServer)에서 짧은 상호 배제 용도로만 쓰입니다. 이 용도에서는 읽기/쓰기 구분이 무의미하므로 단순한 배타 락이 적합합니다.
+
+셋째, shared_timed_mutex의 try_lock_for/try_lock_shared_for 기능을 사용하는 코드가 전혀 없습니다.
+현재 Lock.h가 std::shared_timed_mutex를 기반으로 정의하고 있지만, 타임아웃 기능이 불필요하다면 더 가벼운 타입을 선택하는 것이 합리적입니다.
+따라서 Lock.h를 std::mutex 기반으로 재정의하고, 프로젝트 전체에서 std::mutex 직접 사용을 Lock.h으로 교체하여 일관성을 확보하는 것을 권장합니다. 

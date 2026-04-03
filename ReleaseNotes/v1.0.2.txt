@@ -1,0 +1,50 @@
+[v1.0.2 수정 요약]
+ㆍ싱글톤 남용 수정
+ㆍ에러 핸들링 부재 → ParseFromArray 실패 시 로그 출력
+ㆍHeartbeat 미구현 → 타임아웃 기반 끊김 감지
+ㆍthread::detach 남용 → Graceful Shutdown 지원
+
+ㆍ싱글톤 남용 수정
+수정 파일: Common/ConfigManager.h, GameServer/GameServer.h, GatewayServer/GatewayServer.h, LoginServer/LoginServer.h
+
+private 생성자를 public으로 변경 → 테스트 코드에서 직접 인스턴스 생성 가능
+SetTestInstance(T*) 정적 메서드 추가 → 테스트 시 mock 객체 주입 가능
+GetInstance()/Get()은 기존 코드 하위 호환성 유지
+
+cpp// 테스트 코드에서:
+ConfigManager testCfg;
+testCfg.SetGameServerPort(12345);
+ConfigManager::SetTestInstance(&testCfg);
+// ... 테스트 수행 ...
+ConfigManager::SetTestInstance(nullptr); // 복원
+
+ㆍ에러 핸들링 부재 → ParseFromArray 실패 시 로그 출력
+수정 파일: 모든 핸들러 파일 (ClientHandlers, GameHandlers, WorldHandlers, GatewayHandlers)
+cpp// 변경 전
+if (!req->ParseFromArray(payload, payloadSize)) return;
+
+// 변경 후
+if (!req->ParseFromArray(payload, payloadSize)) {
+    std::cerr << "[Server] 🚨 ParseFromArray 실패: " << __func__
+              << " (payloadSize=" << payloadSize << ")\n";
+    return;
+}
+Session.cpp의 Send() 콜백과 ReadHeader/ReadPayload 에러도 상세 로그 추가.
+
+ㆍHeartbeat 미구현 → 타임아웃 기반 끊김 감지
+수정 파일: LoginServer/Session/Session.h, Session.cpp
+
+last_heartbeat_ 타임스탬프 멤버 추가
+heartbeat_timer_ (boost::asio::steady_timer) 추가
+Handle_Heartbeat() → session->UpdateHeartbeat() 호출로 타임스탬프 갱신
+StartHeartbeatCheck() → 15초 주기로 체크, 30초 무응답 시 강제 연결 종료 (OnDisconnected() 자동 호출)
+
+
+ㆍthread::detach 남용 → Graceful Shutdown 지원
+파일				변경 내용
+GameServer.h 		managed_threads_ 벡터 + AddManagedThread() + Shutdown() 추가
+GameServer.cpp  		AI 스레드 풀·Watchdog detach() → AddManagedThread(), 종료 시 Shutdown() 호출
+LoginServer.h		db_threads_ 벡터 + Shutdown() 추가
+LoginServer.cpp  		DB 스레드 detach() → db_threads_.emplace_back(), 종료 시 Shutdown()
+WorldServer.cpp		gRPC 스레드 detach() → join()
+DummyClient.cpp	StartReceiveThread 반환형 void→std::thread, 호출부에서 join() 추가

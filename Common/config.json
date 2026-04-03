@@ -1,0 +1,43 @@
+﻿{
+	"db_conn": true,
+	"MSSQL_INFO": {
+		"ServerName": ".\\SQLEXPRESS",
+		"Database": "game_db"
+	},
+	"redis_info": {
+		"redis_conn": true,
+		"redis_host": "127.0.0.1",
+		"redis_port": 6379
+	},
+	"dummy_client_info": {
+		"login_server_port": 7777
+	},
+	"game_server_info": {
+		"game_server_port": 9000,
+		"world_conn_port": 7000,
+		"max_thread_count": 4,
+		"ai_thread_count": 4
+	},
+	"gateway_server_info": {
+		"gateway_server_port": 8888,
+		"game_conn_port": 9000,
+		"max_thread_count": 4
+	},
+	"login_server_info": {
+		"login_server_port": 7777,
+		"world_conn_port": 7000,
+		"max_thread_count": 4,
+		"db_thread_count": 2
+	},
+	"world_server_info": {
+		"world_server_port": 7000
+	},
+	"stress_test_tool_info": {
+		"target_connections": 3000,
+		"spawn_rate": 100,
+		"worker_threads": 4,
+		"login_server_ip": "127.0.0.1",
+		"login_server_port": 7777,
+		"bot_action_per": 70
+	}
+}

@@ -1,0 +1,284 @@
+﻿[v1.1.2 수정 요약]
+
+[수정사항]
+1. 패킷 직렬화/역직렬화 구조 취약점 수정 (PacketAssembler 도입)
+2. ParseFromArray 실패 시 세션 강제 종료 메커니즘 추가 (ParseViolationTracker)
+
+[개선사항]
+1. 패킷 암호화 및 보안 강화 (AES-128-CBC + 시퀀스 번호)
+2. 하드코딩된 매직 넘버를 상수 헤더 파일로 중앙화
+
+[버그 수정]
+1. StressTestTool 봇 재접속 시 DB/Redis 누적 버그 수정
+
+================================================================================
+수정사항 1. 패킷 수신 버퍼 구조 취약점 수정 (PacketAssembler 도입)
+================================================================================
+
+  신규 파일: Common/Network/PacketAssembler.h
+
+  [문제]
+  모든 세션 클래스가 std::vector<char> payload_buf_를 사용하고 있었음.
+  패킷을 수신할 때마다 payload_buf_.resize(payload_size)를 호출하여
+  header.size 값에 따라 동적 메모리 할당이 발생함.
+
+  MAX_PACKET_SIZE(4096) 이하의 크기라도, 악의적 클라이언트가 수천 개의
+  패킷을 빠르게 전송하면 매 패킷마다 힙 할당/해제가 반복되어:
+    - 힙 단편화(Heap Fragmentation) 축적
+    - 메모리 할당자 내부 락 경합 (멀티스레드 환경)
+    - 장기 운영 시 점진적 성능 저하
+
+  실무 게임 서버에서는 고정 크기 수신 버퍼를 사전 할당하고
+  패킷 조립기(Packet Assembler)를 별도로 두는 것이 일반적임.
+
+  [수정]
+  PacketAssembler 클래스를 도입하여 고정 크기(MAX_PACKET_SIZE) 버퍼를
+  컴파일 타임에 사전 할당. 각 세션 인스턴스에 1:1로 귀속됨.
+
+    - alignas(64) char payload_buffer_[MAX_PACKET_SIZE]
+      -> 캐시 라인 정렬로 false sharing 방지 및 접근 성능 최적화
+    - ValidatePayloadSize(): 버퍼 레벨에서 크기 검증을 강제
+    - GetBuffer(): boost::asio::async_read에 전달할 수신 버퍼 반환
+    - GetPayloadData(): 수신 완료 후 페이로드 데이터 포인터 반환
+
+  적용된 세션 클래스 (4개):
+    GatewayServer/Session/ClientSession   - 클라이언트 수신 버퍼
+    GameServer/Session/GatewaySession     - S2S 수신 버퍼
+    LoginServer/Session/Session           - 클라이언트 수신 버퍼
+    WorldServer/WorldServer (ServerSession) - S2S 수신 버퍼
+
+  변경 패턴 (모든 세션 공통):
+    변경 전:
+      std::vector<char> payload_buf_;
+      payload_buf_.resize(payload_size);  // 매 패킷마다 동적 할당
+      boost::asio::async_read(socket_, boost::asio::buffer(payload_buf_.data(), ...));
+
+    변경 후:
+      PacketAssembler assembler_;  // 고정 크기 사전 할당
+      if (!assembler_.ValidatePayloadSize(payload_size)) { /* 연결 종료 */ }
+      boost::asio::async_read(socket_, boost::asio::buffer(assembler_.GetBuffer(), ...));
+
+================================================================================
+수정사항 2. ParseFromArray 실패 시 세션 강제 종료 (ParseViolationTracker)
+================================================================================
+
+  수정 파일: Common/PacketDispatcher.h (ParseViolationTracker 클래스 추가)
+  수정 파일: GatewayServer/Session/ClientSession.h, ClientSession.cpp
+  수정 파일: GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp
+
+  [문제]
+  Protobuf ParseFromArray() 실패 시 로그를 출력하고 return하는 것까지는
+  구현되어 있었으나, 해당 세션에 대한 후속 조치가 없었음.
+  악의적 클라이언트가 의도적으로 깨진 페이로드를 반복 전송하면:
+    - 서버 로그만 무한히 쌓임 (디스크 소모)
+    - 세션은 계속 유지되어 서버 리소스를 점유
+    - Rate Limiter를 우회하는 새로운 공격 벡터 형성
+
+  [수정]
+  ParseViolationTracker 클래스를 도입하여 연속 실패 횟수를 추적.
+
+    - OnParseFailure(): 위반 카운터 증가, 임계값 초과 시 true 반환
+    - OnParseSuccess(): 정상 패킷 수신 시 카운터 리셋
+    - MAX_PARSE_VIOLATIONS (SecurityConstants::Packet에서 관리, 기본값 5)
+
+  모든 핸들러에서:
+    변경 전:
+      if (!req.ParseFromArray(payload, payloadSize)) {
+          LOG_ERROR(...);
+          return;  // 로그만 출력하고 세션 유지
+      }
+
+    변경 후:
+      if (!req.ParseFromArray(payload, payloadSize)) {
+          LOG_ERROR(...);
+          if (session->OnParseViolation()) {
+              session->OnDisconnected();  // 임계값 초과 시 강제 종료
+          }
+          return;
+      }
+      session->OnParseSuccess();  // 정상 패킷 시 카운터 리셋
+
+================================================================================
+개선사항 1. 패킷 암호화 및 보안 강화 (AES-128-CBC + 시퀀스 번호)
+================================================================================
+
+  신규 파일: Common/Network/PacketCrypto.h, Common/Network/PacketCrypto.cpp
+  신규 파일: Common/Define/SecurityConstants.h
+
+  [현재 문제]
+  TCP 평문 통신으로 패킷 스니핑에 완전 노출됨.
+  리플레이 공격(동일 패킷 재전송) 방어 수단이 전무함.
+
+  [추가 내용]
+  1. AES-128-CBC 대칭키 암호화 유틸리티
+     - Windows BCrypt API 사용 (FIPS 140-2 인증 OS 수준 암호 모듈)
+     - 매 패킷마다 BCryptGenRandom으로 랜덤 IV 생성
+
+  2. 시퀀스 번호 기반 리플레이 공격 방지
+     - 각 세션에 단조 증가하는 4바이트 시퀀스 번호 부여
+     - 이미 처리한 시퀀스 재수신 시 차단
+
+  3. 암호화된 패킷 구조
+     [PacketHeader(4B)][SeqNum(4B)][IV(16B)][EncryptedPayload(N)]
+
+================================================================================
+개선사항 2. 하드코딩된 매직 넘버 상수 파일 중앙화
+================================================================================
+
+  신규 파일: Common/Define/LoginConstants.h
+  신규 파일: Common/Define/StressConstants.h
+  신규 파일: Common/Define/SecurityConstants.h
+
+  [수정]
+  세 개의 상수 헤더 파일을 신규 생성하여 역할별로 중앙화:
+
+  (1) LoginConstants.h - 로그인 서버 전용 상수
+      LoginConstants::Heartbeat::CHECK_INTERVAL_SECONDS = 15
+      LoginConstants::Heartbeat::TIMEOUT_SECONDS = 30
+
+  (2) StressConstants.h - 부하 테스트 봇 전용 상수
+      StressConstants::Auth::BOT_PASSWORD = "1234"
+      StressConstants::BotAI::ACTION_MOVE_PERCENT = 70
+      StressConstants::BotAI::MIN_ACTION_DELAY_MS = 2000
+      StressConstants::BotAI::MAX_ACTION_DELAY_MS = 4000
+
+  (3) SecurityConstants.h - 서버 공통 보안 상수
+      SecurityConstants::Packet::MAX_PARSE_VIOLATIONS = 5
+      SecurityConstants::Packet::MAX_PACKETS_PER_SECOND = 200
+      SecurityConstants::Token::TOKEN_LIFETIME_MS = 300000
+
+================================================================================
+버그 수정 1. StressTestTool 봇 재접속 시 DB/Redis 누적
+================================================================================
+
+  수정 파일: StressTestTool/Session/StressSession.h
+  수정 파일: StressTestTool/Manager/StressManager.h
+  수정 파일: StressTestTool/Manager/StressManager.cpp
+
+  [현상]
+  config.json에 target_connections=3000으로 설정 후 StressTestTool 실행 시:
+    - 활성 봇(Metrics 표시): 3000명 (정상)
+    - DB(Accounts 테이블): ~3182개 (초과)
+    - Redis 키 수: ~3124개 (초과, DB와도 불일치)
+
+  [원인 분석]
+
+  ■ DB 초과 원인 (3000 → 3182):
+    StressManager의 ScheduleNextSpawn()과 StartReconnectLoop()에서
+    봇 ID를 total_spawn_count_++ 누적 카운터로 생성하고 있었음.
+
+      std::string bot_id = "BOT_STRESS_" + std::to_string(total_spawn_count_++);
+
+    이 카운터는 봇이 끊어지고 재접속할 때에도 절대 감소하지 않으므로,
+    재접속할 때마다 새로운 ID(BOT_STRESS_3000, 3001, ...)가 발급됨.
+
+    새 ID로 LoginServer에 접속하면 ProcessLogin()이 해당 계정을
+    Accounts 테이블에서 찾지 못하고 자동 회원가입(NEW_REGISTERED)을 수행.
+    결과적으로 재접속 횟수만큼 DB에 추가 INSERT가 발생함.
+
+      BOT_STRESS_0 ~ 2999: 최초 스폰 (3000개 INSERT)
+      BOT_STRESS_3000 ~ 3181: 재접속 (182개 추가 INSERT)
+      합계: 3182개
+
+  ■ Redis 초과 원인 (3000 → 3124):
+    Redis 엔트리는 두 시점에서 생성/삭제됨:
+      생성: 유저가 GameServer의 Zone에 진입할 때 (첫 MoveReq 처리 시)
+           Handle_GatewayGameMoveReq → RedisManager::SetPlayerOnline()
+      삭제: 유저가 퇴장할 때
+           Handle_GatewayGameLeaveReq → RedisManager::RemovePlayer()
+
+    문제 시나리오:
+      1) BOT_STRESS_0이 Zone에 진입 → Redis "player:BOT_STRESS_0" 생성
+      2) BOT_STRESS_0이 끊어짐 → GatewayServer가 LEAVE_REQ 전송
+      3) 그런데 LEAVE_REQ가 GameServer에 도달하기 전에 (비동기 처리 지연)
+      4) StressManager가 BOT_STRESS_3000 (새 ID)으로 재스폰
+      5) BOT_STRESS_3000이 Zone 진입 → Redis "player:BOT_STRESS_3000" 생성
+      6) 뒤늦게 LEAVE_REQ 도달 → Redis "player:BOT_STRESS_0" 삭제
+
+    대부분의 경우 6)에서 정리되지만, 일부 LEAVE_REQ가 유실되거나
+    GameServer 처리 순서에 따라 삭제가 누락되면 고아(orphan) 엔트리가 잔류.
+    활성 3000 + 고아 124 = 3124개.
+
+  ■ DB ≠ Redis 불일치 원인 (3182 ≠ 3124):
+    DB 엔트리는 LOGIN 시점(ProcessLogin)에서 생성되고,
+    Redis 엔트리는 첫 MOVE 시점(Handle_GatewayGameMoveReq)에서 생성됨.
+
+    봇이 로그인 성공(DB INSERT) 후 Gateway 토큰 검증 실패나
+    첫 이동 전에 끊어지면, DB에만 엔트리가 있고 Redis에는 없는 상태가 됨.
+    이 차이(3182 - 3124 = 58)가 "로그인은 했지만 Zone 진입은 실패한" 봇의 수.
+
+  [수정]
+
+  ■ 핵심 수정: 봇 ID 재사용 큐(reusable_ids_) 도입
+
+    StressManager에 std::queue<std::string> reusable_ids_를 추가.
+
+    (1) OnSessionDisconnected에서 끊어진 봇의 ID를 큐에 반환:
+        const std::string& disconnected_id = session->GetAccountId();
+        reusable_ids_.push(disconnected_id);
+
+    (2) AcquireBotId() 함수를 신규 추가하여 ID 발급을 중앙화:
+        - reusable_ids_ 큐에 ID가 있으면 재사용 (front → pop)
+        - 큐가 비어있을 때만 total_spawn_count_++로 새 ID 생성
+
+    (3) ScheduleNextSpawn과 StartReconnectLoop 모두 AcquireBotId() 호출:
+        변경 전:
+          std::string bot_id = "BOT_STRESS_" + std::to_string(total_spawn_count_++);
+        변경 후:
+          std::string bot_id = AcquireBotId();
+
+    (4) StressSession에 GetAccountId() Getter 추가:
+        OnSessionDisconnected에서 봇의 ID를 조회하기 위해 필요.
+
+  ■ 수정 후 동작 흐름:
+
+    [최초 스폰]
+      AcquireBotId() → 큐 비어있음 → "BOT_STRESS_0" 새 ID 생성
+      ProcessLogin → 계정 없음 → NEW_REGISTERED (DB INSERT)
+      Zone 진입 → SetPlayerOnline (Redis 생성)
+
+    [봇 끊김]
+      OnSessionDisconnected → reusable_ids_.push("BOT_STRESS_0")
+      LEAVE_REQ → RemovePlayer (Redis 삭제)
+
+    [재접속]
+      AcquireBotId() → 큐에서 "BOT_STRESS_0" 꺼냄 (재사용)
+      ProcessLogin → 계정 찾음 → SUCCESS (DB INSERT 없음)
+      Zone 진입 → SetPlayerOnline (같은 Redis 키에 덮어쓰기)
+
+  ■ 수정 효과:
+    - DB(Accounts): target_connections(3000)개를 절대 초과하지 않음
+    - Redis: 활성 봇 수(3000)와 정확히 일치
+    - DB = Redis = 활성 봇 수 (3000개로 수렴)
+    - LEAVE_REQ 유실로 Redis 고아 엔트리가 남더라도,
+      같은 ID로 재접속 시 SetPlayerOnline이 덮어쓰므로 자동 정리됨
+
+
+================================================================================
+수정 파일 목록
+================================================================================
+
+[신규]
+  Common/Network/PacketAssembler.h        - 고정 크기 수신 버퍼 래퍼
+  Common/Network/PacketCrypto.h           - AES-128-CBC 암호화 헤더
+  Common/Network/PacketCrypto.cpp         - AES-128-CBC 암호화 구현 (BCrypt API)
+  Common/Define/LoginConstants.h          - 로그인 서버 상수 정의
+  Common/Define/StressConstants.h         - 부하 테스트 봇 상수 정의
+  Common/Define/SecurityConstants.h       - 보안 관련 공통 상수 정의
+
+[수정]
+  Common/PacketDispatcher.h               - SecurityConstants 적용, ParseViolationTracker 추가
+  GatewayServer/Session/ClientSession.h   - PacketAssembler, ParseViolationTracker 적용
+  GatewayServer/Session/ClientSession.cpp - 고정 버퍼 수신, 위반 추적 통합
+  GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp - ParseFromArray 위반 추적 적용
+  GameServer/Session/GatewaySession.h     - PacketAssembler 적용
+  GameServer/Session/GatewaySession.cpp   - 고정 버퍼 수신 통합
+  LoginServer/Session/Session.h           - PacketAssembler, LoginConstants 적용
+  LoginServer/Session/Session.cpp         - 고정 버퍼 수신, LoginConstants 통합
+  WorldServer/WorldServer.h              - PacketAssembler, SecurityConstants 적용
+  WorldServer/WorldServer.cpp            - 고정 버퍼 수신 통합
+  StressTestTool/Session/StressSession.h  - StressConstants 적용, GetAccountId() 추가
+  StressTestTool/Session/StressSession.cpp - StressConstants 통합
+  StressTestTool/Manager/StressManager.h  - reusable_ids_ 큐, AcquireBotId() 추가
+  StressTestTool/Manager/StressManager.cpp - 봇 ID 재사용 로직 구현
+  ReleaseNotes/v1.1.2.txt                 - 이 파일

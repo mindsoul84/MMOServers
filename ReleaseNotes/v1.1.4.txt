@@ -1,0 +1,124 @@
+﻿[v1.1.4 수정 요약]
+Lock.h를 std::mutex 기반으로 재정의하고, 프로젝트 전체의 뮤텍스 타입을
+Lock.h 으로 통일하여 동시성 코드의 일관성을 확보
+
+================================================================================
+1. Lock.h std::mutex 기반 재정의
+================================================================================
+
+  수정 파일: Common/Utils/Lock.h
+
+  [변경 전]
+    UTILITY::Lock      = std::shared_timed_mutex
+    UTILITY::WriteLock  = std::unique_lock<Lock>
+    UTILITY::ReadLock   = std::shared_lock<Lock>
+
+  [변경 후]
+    UTILITY::Lock       = std::mutex
+    UTILITY::LockGuard  = std::lock_guard<Lock>
+    UTILITY::UniqueLock = std::unique_lock<Lock>
+
+  [변경 근거]
+  1. game_strand_ 도입(v1.1.1) 이후 읽기/쓰기 락 구분이 불필요해짐
+     -> 게임 로직은 strand가 직렬화하므로 shared_lock 이점이 없음
+  2. 현재 코드의 모든 임계 구역이 마이크로초 이하로 짧아
+     shared_mutex의 읽기 동시성 이점이 오버헤드에 상쇄됨
+  3. shared_timed_mutex의 try_lock_for/try_lock_shared_for를
+     사용하는 코드가 전혀 없음
+  4. 기존 WriteLock/ReadLock을 실제로 사용하는 코드가 없었음
+     (v1.1.1에서 playerMutex_/monsterMutex_ 제거,
+      v1.1.3에서 Sector::mutex_ 제거 후 참조처 전부 소멸)
+
+  [네이밍 변경]
+  - LockGuard: 기존 std::lock_guard<std::mutex> 대체
+    -> 가장 빈번하게 사용되는 패턴 (스코프 기반 RAII 락)
+  - UniqueLock: 기존 std::unique_lock<std::mutex> 대체
+    -> std::condition_variable 대기에 필요 (DBConnectionPool)
+
+================================================================================
+2. 프로젝트 전체 뮤텍스 타입 통일
+================================================================================
+
+  [변경 내용]
+  프로젝트 내 모든 std::mutex 직접 사용을 UTILITY::Lock 별칭으로 교체.
+  모든 std::lock_guard<std::mutex>를 UTILITY::LockGuard로 교체.
+  모든 std::unique_lock<std::mutex>를 UTILITY::UniqueLock으로 교체.
+
+  [뮤텍스 선언 변경]
+  파일                                  멤버 변수                   변경
+  Common/DB/DBConnectionPool.h          mutex_                      std::mutex -> UTILITY::Lock
+  Common/Network/PacketCrypto.h         crypto_mutex_               std::mutex -> UTILITY::Lock
+  Common/Redis/RedisManager.h           mutex_                      std::mutex -> UTILITY::Lock
+  Common/Utils/Logger.h                 s_mutex_                    std::mutex -> UTILITY::Lock
+  GameServer/GameServer.h               gatewaySessionMutex         std::mutex -> UTILITY::Lock
+  GatewayServer/GatewayServer.h         clientMutex, tokenMutex     std::mutex -> UTILITY::Lock
+  LoginServer/LoginServer.h             loginMutex                  std::mutex -> UTILITY::Lock
+  WorldServer/WorldServer.h             g_serverSessionMutex        std::mutex -> UTILITY::Lock
+  WorldServer/WorldServer.h             TokenStore::mutex_          std::mutex -> UTILITY::Lock
+  StressTestTool/Manager/StressManager.h manager_mtx_               std::mutex -> UTILITY::Lock
+
+  [락 사용 변경]
+  파일                                              변경 횟수    변경 내용
+  Common/DB/DBConnectionPool.cpp                    5           lock_guard -> LockGuard, unique_lock -> UniqueLock
+  Common/Network/PacketCrypto.cpp                   2           lock_guard -> LockGuard
+  Common/Redis/RedisManager.h                       7           lock_guard -> LockGuard (인라인 메서드)
+  Common/Utils/Logger.h                             2           lock_guard -> LockGuard (인라인 메서드)
+  GatewayServer/GatewayServer.h                     2           lock_guard -> LockGuard (인라인 메서드)
+  WorldServer/WorldServer.h                         3           lock_guard -> LockGuard (TokenStore 인라인)
+  GameServer/GameServer.cpp                         2           lock_guard -> LockGuard
+  GameServer/Session/GatewaySession.cpp             1           lock_guard -> LockGuard
+  GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp  1    lock_guard -> LockGuard
+  GatewayServer/Handlers/GameGateway/GameHandlers.cpp      3    lock_guard -> LockGuard
+  GatewayServer/Session/ClientSession.cpp           1           lock_guard -> LockGuard
+  LoginServer/Handlers/ClientLogin/ClientHandlers.cpp      1    lock_guard -> LockGuard
+  LoginServer/Handlers/LoginWorld/WorldHandlers.cpp        1    lock_guard -> LockGuard
+  LoginServer/Session/Session.cpp                   1           lock_guard -> LockGuard
+  WorldServer/WorldServer.cpp                       3           lock_guard -> LockGuard + mutex 정의
+  WorldServer/AdminAPI/AdminService.cpp             1           lock_guard -> LockGuard
+  WorldServer/Handlers/WorldHandlers.cpp            1           lock_guard -> LockGuard
+  StressTestTool/Manager/StressManager.cpp          3           lock_guard -> LockGuard
+
+  [#include 추가]
+  Lock.h를 사용하기 위해 다음 헤더 파일에 #include 추가:
+    Common/DB/DBConnectionPool.h         -> #include "../Utils/Lock.h"
+    Common/Network/PacketCrypto.h        -> #include "../Utils/Lock.h"
+    Common/Redis/RedisManager.h          -> #include "../Utils/Lock.h"
+    Common/Utils/Logger.h                -> #include "Lock.h"
+    GameServer/GameServer.h              -> #include "../Common/Utils/Lock.h"
+    GatewayServer/GatewayServer.h        -> #include "..\Common\Utils\Lock.h"
+    LoginServer/LoginServer.h            -> #include "../Common/Utils/Lock.h"
+    WorldServer/WorldServer.h            -> #include "../Common/Utils/Lock.h"
+    StressTestTool/Manager/StressManager.h -> #include "../../Common/Utils/Lock.h"
+
+================================================================================
+수정 파일 목록
+================================================================================
+
+[수정]
+  Common/Utils/Lock.h                                   - std::mutex 기반 재정의
+  Common/DB/DBConnectionPool.h                          - Lock.h 적용
+  Common/DB/DBConnectionPool.cpp                        - Lock.h 적용
+  Common/Network/PacketCrypto.h                         - Lock.h 적용
+  Common/Network/PacketCrypto.cpp                       - Lock.h 적용
+  Common/Redis/RedisManager.h                           - Lock.h 적용
+  Common/Utils/Logger.h                                 - Lock.h 적용
+  GameServer/GameServer.h                               - Lock.h 적용
+  GameServer/GameServer.cpp                             - Lock.h 적용
+  GameServer/Session/GatewaySession.cpp                 - Lock.h 적용
+  GatewayServer/GatewayServer.h                         - Lock.h 적용
+  GatewayServer/Handlers/ClientGateway/ClientHandlers.cpp - Lock.h 적용
+  GatewayServer/Handlers/GameGateway/GameHandlers.cpp   - Lock.h 적용
+  GatewayServer/Session/ClientSession.cpp               - Lock.h 적용
+  LoginServer/LoginServer.h                             - Lock.h 적용
+  LoginServer/Handlers/ClientLogin/ClientHandlers.cpp   - Lock.h 적용
+  LoginServer/Handlers/LoginWorld/WorldHandlers.cpp     - Lock.h 적용
+  LoginServer/Session/Session.cpp                       - Lock.h 적용
+  WorldServer/WorldServer.h                             - Lock.h 적용
+  WorldServer/WorldServer.cpp                           - Lock.h 적용
+  WorldServer/AdminAPI/AdminService.cpp                 - Lock.h 적용
+  WorldServer/Handlers/WorldHandlers.cpp                - Lock.h 적용
+  StressTestTool/Manager/StressManager.h                - Lock.h 적용
+  StressTestTool/Manager/StressManager.cpp              - Lock.h 적용
+
+[신규]
+  ReleaseNotes/v1.1.4.txt                               - 이 파일

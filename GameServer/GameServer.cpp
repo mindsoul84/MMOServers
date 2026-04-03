@@ -1,0 +1,250 @@
+﻿#include "GameServer.h"
+#include "Session/GatewaySession.h"
+#include "Network/WorldConnection.h"
+#include "Handlers/GatewayGame/GatewayHandlers.h"
+#include "Handlers/WorldGame/WorldHandlers.h"
+
+#include "../Common/ConfigManager.h"
+#include "../Common/DB/DBManager.h"
+#include "../Common/DataManager/DataManager.h"
+#include "../Common/Utils/Logger.h"
+#include "../Common/Redis/RedisManager.h"
+#include "../Common/MemoryPool.h"
+#include "Pathfinder/MapGenerator.h"
+#include "Monster/MonsterManager.h"
+
+#include <iostream>
+#include <thread>
+#include <windows.h>
+#include <csignal>
+
+#include <recastnavigation/DetourNavMesh.h>
+#include <recastnavigation/DetourNavMeshBuilder.h>
+#include <recastnavigation/DetourNavMeshQuery.h>
+
+using boost::asio::ip::tcp;
+
+thread_local dtNavMeshQuery* t_navQuery = nullptr;
+
+static boost::asio::io_context* g_main_io_context = nullptr;
+
+static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
+    if (ctrlType == CTRL_C_EVENT || ctrlType == CTRL_CLOSE_EVENT) {
+        LOG_INFO("System", "종료 신호 수신. Graceful Shutdown 시작...");
+        if (g_main_io_context) {
+            g_main_io_context->stop();
+        }
+        auto& ctx = GameContext::Get();
+        ctx.is_running_.store(false);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+class GameNetworkServer {
+    tcp::acceptor acceptor_;
+public:
+    GameNetworkServer(boost::asio::io_context& io_context, short port)
+        : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
+        do_accept();
+    }
+private:
+    void do_accept() {
+        acceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
+            if (!ec) {
+                LOG_INFO("GameServer", "S2S 통신: GatewayServer 접속 확인 완료!");
+                auto new_session = std::make_shared<GatewaySession>(std::move(socket));
+                {
+                    UTILITY::LockGuard lock(GameContext::Get().gatewaySessionMutex);
+                    GameContext::Get().gatewaySessions.insert(new_session);
+                }
+                new_session->start();
+            }
+            do_accept();
+            });
+    }
+};
+
+void GameContext::BroadcastToGateways(uint16_t pktId, const google::protobuf::Message& msg) {
+    UTILITY::LockGuard lock(gatewaySessionMutex);
+    for (auto& session : gatewaySessions) {
+        if (session) {
+            session->Send(pktId, msg);
+        }
+    }
+}
+
+void StartAIThreadPool(int ai_thread_count) {
+    LOG_INFO("System", "AI 전용 비동기 스레드 풀 가동 (" << ai_thread_count << "개)...");
+    auto& ctx = GameContext::Get();
+
+    for (int i = 0; i < ai_thread_count; ++i) {
+        ctx.AddManagedThread(std::thread([i, &ctx]() {
+            t_navQuery = dtAllocNavMeshQuery();
+            if (t_navQuery) {
+                dtStatus status = t_navQuery->init(ctx.navMesh.GetRawNavMesh(), 2048);
+                if (dtStatusFailed(status)) {
+                    LOG_ERROR("AI", "Thread " << i << " NavMeshQuery 초기화 실패");
+                }
+            }
+
+            ctx.ai_io_context.run();
+
+            if (t_navQuery) {
+                dtFreeNavMeshQuery(t_navQuery);
+                t_navQuery = nullptr;
+            }
+            LOG_INFO("AI", "Thread " << i << " 정상 종료됨.");
+        }));
+    }
+}
+
+int main() {
+    SetConsoleOutputCP(CP_UTF8);
+
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
+    HANDLE hMutex = CreateMutex(NULL, FALSE, L"Global\\GameServer_Unique_Mutex_Lock");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        LOG_FATAL("Error", "GameServer가 이미 실행 중입니다. 창을 닫습니다.");
+        CloseHandle(hMutex);
+        return 1;
+    }
+
+    if (!ConfigManager::GetInstance().LoadConfig("config.json")) {
+        LOG_FATAL("System", "config 설정 파일 오류로 인해 GameServer 종료합니다.");
+        system("pause");
+        return -1;
+    }
+
+    SendBufferPool::GetInstance().Initialize(PoolConfig::HEAVY_SERVER);
+
+    // ==========================================
+    // [에러 복구 개선] DB 연결 실패 시 Degraded Mode로 계속 운영
+    //
+    // 변경 전: DB 연결 실패 -> 서버 즉시 종료
+    // 변경 후: DB 연결 실패 -> 경고 로그 후 DB 없이 서버 계속 가동
+    //   -> 게임 로직(이동, 전투, AI)은 DB 없이도 동작 가능
+    //   -> 로그인/계정 관련 기능만 제한됨
+    // ==========================================
+    if (ConfigManager::GetInstance().UseDB()) {
+        t_dbManager = std::make_unique<DBManager>();
+        if (!t_dbManager->Connect()) {
+            LOG_WARN("System", "DB 연결 실패! Degraded Mode로 서버를 계속 실행합니다. (계정 기능 제한)");
+            t_dbManager.reset();
+        }
+    }
+    else {
+        LOG_WARN("System", "config.json 설정에 따라 DB 연동을 건너뜁니다.");
+    }
+
+    if (ConfigManager::GetInstance().UseRedis()) {
+        std::string redis_host = ConfigManager::GetInstance().GetRedisHost();
+        int redis_port = ConfigManager::GetInstance().GetRedisPort();
+
+        if (!RedisManager::GetInstance().Connect(redis_host, redis_port)) {
+            LOG_WARN("System", "Redis 연결 실패. Redis 없이 서버를 계속 실행합니다.");
+        }
+    }
+    else {
+        LOG_INFO("System", "config.json 설정에 따라 Redis 연동을 건너뜁니다.");
+    }
+
+    auto& ctx = GameContext::Get();
+
+    if (!ctx.dataManager.LoadAllData("JsonData/")) {
+        LOG_FATAL("System", "몬스터 데이터를 불러오지 못해 서버를 종료합니다.");
+        return -1;
+    }
+
+    ctx.zone = std::make_unique<Zone>(
+        static_cast<int>(GameConstants::Map::WIDTH),
+        static_cast<int>(GameConstants::Map::HEIGHT),
+        GameConstants::Map::SECTOR_SIZE
+    );
+
+    GenerateDummyMapFile("dummy_map.bin");
+    ctx.navMesh.LoadNavMeshFromFile("dummy_map.bin");
+
+    InitMonsters();
+    StartAITickThread();
+
+    short ai_thread_count = ConfigManager::GetInstance().GetGameAiThreadCount();
+    StartAIThreadPool(ai_thread_count);
+
+    // Gateway -> Game 핸들러 등록
+    ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_MOVE_REQ,   Handle_GatewayGameMoveReq);
+    ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_LEAVE_REQ,  Handle_GatewayGameLeaveReq);
+    ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_ATTACK_REQ, Handle_GatewayGameAttackReq);
+    ctx.gatewayDispatcher.RegisterHandler(Protocol::PKT_GATEWAY_GAME_CHAT_REQ,   Handle_GatewayGameChatReq);
+
+    // World -> Game 핸들러 등록
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_MONSTER_BUFF,   Handle_WorldGameMonsterBuff);
+    ctx.worldDispatcher.RegisterHandler(Protocol::PKT_WORLD_GAME_TOKEN_NOTIFY,   Handle_WorldGameTokenNotify);
+
+    try {
+        short game_port = ConfigManager::GetInstance().GetGameServerPort();
+        GameNetworkServer server(ctx.io_context, game_port);
+        LOG_INFO("System", "코어 게임 로직 서버 가동 (Port: " << game_port << ") Created by Jeong Shin Young");
+
+        g_main_io_context = &ctx.io_context;
+
+        ctx.worldConnection = std::make_shared<WorldConnection>(ctx.io_context);
+        short world_port = ConfigManager::GetInstance().GetGameWorldConnPort();
+        ctx.worldConnection->Connect("127.0.0.1", world_port);
+
+        unsigned int max_thread_count = ConfigManager::GetInstance().GetGameMaxThreadCount();
+        if (max_thread_count == 0) max_thread_count = std::thread::hardware_concurrency();
+        LOG_INFO("System", "워커 스레드 개수 설정: " << max_thread_count << "개");
+
+#ifdef  DEF_STRESS_TEST_DEADLOCK_WATCHDOG
+        ctx.AddManagedThread(std::thread([]() {
+            uint64_t last_count = 0;
+            auto& ctx = GameContext::Get();
+
+            while (ctx.is_running_.load()) {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                if (!ctx.is_running_.load()) break;
+
+                uint64_t current_count = ctx.processed_packet_count.load();
+                int bot_count = ctx.connected_bot_count.load();
+
+                if (bot_count > 0 && current_count == last_count) {
+                    LOG_FATAL("Watchdog", "5초간 처리된 패킷이 0개입니다! 데드락 발생 의심!!!");
+                }
+                else if (bot_count > 0) {
+                    LOG_INFO("Watchdog", "서버 정상 틱 동작 중 (5초간 처리량: " << (current_count - last_count) << " pkts)");
+                }
+                last_count = current_count;
+            }
+            LOG_INFO("Watchdog", "정상 종료됨.");
+        }));
+#endif
+
+        LOG_INFO("System", "스레드 풀 구성 중...");
+        std::vector<std::thread> threads;
+        for (unsigned int i = 0; i < max_thread_count; ++i) {
+            threads.emplace_back([&ctx]() {
+                ctx.io_context.run();
+            });
+        }
+        LOG_INFO("System", "스레드 풀 구성 완료. GatewayServer S2S 접속 대기 중...");
+
+        for (auto& t : threads) {
+            if (t.joinable()) t.join();
+        }
+    }
+    catch (std::exception& e) {
+        LOG_FATAL("Error", "예외 발생: " << e.what());
+    }
+
+    ctx.Shutdown();
+
+    if (RedisManager::GetInstance().IsConnected()) {
+        RedisManager::GetInstance().Disconnect();
+    }
+
+    g_main_io_context = nullptr;
+    LOG_INFO("System", "서버가 안전하게 종료되었습니다.");
+    return 0;
+}

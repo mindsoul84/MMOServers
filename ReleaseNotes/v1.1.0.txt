@@ -1,0 +1,89 @@
+﻿[v1.1.0 수정 요약]
+ㆍ락(Lock) 타입 유틸리티 도입 및 프로젝트 전체 통일
+
+================================================================================
+1. 락 타입 유틸리티 도입
+================================================================================
+
+■ 신규 파일: Common/Utils/Lock.h
+
+  프로젝트 전체에서 사용하는 읽기/쓰기 락 타입을 UTILITY 네임스페이스로 통일합니다.
+
+    UTILITY::Lock      = std::shared_timed_mutex  (뮤텍스 타입)
+    UTILITY::WriteLock  = std::unique_lock<Lock>   (쓰기 락, 배타적)
+    UTILITY::ReadLock   = std::shared_lock<Lock>   (읽기 락, 공유)
+
+  [도입 목적]
+  - 기존 std::shared_mutex / std::unique_lock<std::shared_mutex> /
+    std::shared_lock<std::shared_mutex> 타입을 직접 사용하던 방식을
+    짧고 의미 있는 별칭으로 대체하여 가독성과 일관성을 확보
+  - 뮤텍스 타입을 한 곳에서 관리하여 향후 락 구현체 교체 시
+    Lock.h만 수정하면 프로젝트 전체에 반영되는 구조
+
+================================================================================
+2. 뮤텍스 타입 변경 (std::shared_mutex -> UTILITY::Lock)
+================================================================================
+
+  UTILITY::Lock의 실제 타입은 std::shared_timed_mutex입니다.
+  std::shared_mutex와 동일한 읽기/쓰기 락 인터페이스를 제공하면서
+  추가로 try_lock_for(), try_lock_shared_for() 등 타임아웃 기반
+  락 획득 기능을 지원합니다.
+
+  기존 std::shared_mutex로 선언된 멤버 변수를 UTILITY::Lock으로 변경합니다.
+  이 변경이 없으면 UTILITY::WriteLock/ReadLock 사용 시
+  E0289 컴파일 에러(생성자 인수 불일치)가 발생합니다.
+
+  변경 위치:
+    GameServer/GameServer.h   — playerMutex_, monsterMutex_
+    GameServer/Zone/Zone.h    — Sector::mutex_
+
+================================================================================
+3. 락 사용부 전체 타입 변경
+================================================================================
+
+  프로젝트 내 모든 std::unique_lock<std::shared_mutex>와
+  std::shared_lock<std::shared_mutex> 사용을 UTILITY::WriteLock과
+  UTILITY::ReadLock으로 교체합니다.
+
+  ■ GameServer/Zone/Zone.h (템플릿 메서드)
+    - ForEachPlayer(), ForEachMonster() 내부의
+      std::shared_lock<std::shared_mutex> -> UTILITY::ReadLock
+
+  ■ GameServer/Zone/Zone.cpp
+    - Sector::AddPlayer/RemovePlayer/AddMonster/RemoveMonster
+      std::unique_lock<std::shared_mutex> -> UTILITY::WriteLock
+    - Sector::GetPlayers/GetPlayerCount/GetMonsters
+      std::shared_lock<std::shared_mutex> -> UTILITY::ReadLock
+
+  ■ GameServer/Handlers/GatewayGame/GatewayHandlers.cpp
+    - Handle_GatewayGameMoveReq: playerMutex_ 읽기/쓰기 락
+    - Handle_GatewayGameLeaveReq: playerMutex_ 쓰기 락
+    - Handle_GatewayGameAttackReq: playerMutex_/monsterMutex_ 읽기 락
+    - Handle_GatewayGameChatReq: playerMutex_ 읽기 락
+
+  ■ GameServer/Handlers/WorldGame/WorldHandlers.cpp
+    - Handle_WorldGameMonsterBuff: monsterMutex_ 쓰기 락
+
+  ■ GameServer/Monster/MonsterManager.cpp
+    - InitMonsters 공격 콜백: playerMutex_ 읽기 락
+    - ProcessDeadMonster: playerMutex_ 읽기 락
+    - ProcessIdleMonster: playerMutex_ 읽기 락
+    - ProcessChaseMonster: playerMutex_ 읽기 락
+    - ProcessAttackMonster: playerMutex_ 읽기 락
+    - SyncMonsterPosition: playerMutex_ 읽기 락
+    - ScheduleNextAITick: monsterMutex_ 읽기 락
+
+================================================================================
+수정 파일 목록
+================================================================================
+[신규]
+  Common/Utils/Lock.h                                   — 락 타입 별칭 정의
+
+[수정]
+  GameServer/GameServer.h                               — Lock.h 포함, 뮤텍스 타입 변경
+  GameServer/Zone/Zone.h                                — Lock.h 포함, 뮤텍스/락 타입 변경
+  GameServer/Zone/Zone.cpp                              — 락 타입 변경
+  GameServer/Handlers/GatewayGame/GatewayHandlers.cpp   — 락 타입 변경
+  GameServer/Handlers/WorldGame/WorldHandlers.cpp       — 락 타입 변경
+  GameServer/Monster/MonsterManager.cpp                 — 락 타입 변경
+  ReleaseNotes/v1.1.0.txt                              — 이 파일

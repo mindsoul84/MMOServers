@@ -1,0 +1,169 @@
+﻿[v1.0.7 수정 요약]
+ㆍ동시성 모델 일관성 확보 (WorldServer strand 패턴 적용)
+ㆍ락 설계 개선 (gameStateMutex 분할)
+ㆍ패킷 처리 파이프라인 강화 (Rate Limiting, 패킷 ID 검증)
+ㆍZone/AOI 시스템 개선 (원자적 섹터 전환, 벡터 할당 최적화)
+ㆍ에러 복구 및 장애 대응 개선 (재연결 로직, Degraded Mode)
+
+================================================================================
+1. 동시성 모델 일관성 확보
+================================================================================
+
+■ 수정 파일: WorldServer/WorldServer.h, WorldServer/WorldServer.cpp
+
+  [문제]
+  WorldServer의 ServerSession::Send()에 strand가 미적용되어 있었음.
+  LoginServer와 GameServer가 동시에 WorldServer 세션에 패킷을 보낼 경우
+  같은 소켓에 concurrent async_write가 발생하여 TCP 스트림이 오염될 수 있었음.
+
+  GatewaySession, ClientSession, GameConnection은 모두 strand + send_queue 패턴이
+  적용되어 있었으나 ServerSession만 누락된 불일치 상태였음.
+
+  [수정]
+  ServerSession에 strand_ + send_queue_ + DoWrite() 패턴을 적용하여
+  프로젝트 내 모든 네트워크 세션 클래스가 동일한 동시성 보호를 갖추도록 통일.
+
+  적용 완료된 전체 세션 목록:
+    - GameServer/GatewaySession      (기존 적용)
+    - GatewayServer/ClientSession    (기존 적용)
+    - GatewayServer/GameConnection   (v1.0.3 적용)
+    - LoginServer/WorldConnection    (v1.0.3 적용)
+    - GameServer/WorldConnection     (v1.0.3 적용)
+    - WorldServer/ServerSession      (이번 수정에서 적용)
+
+================================================================================
+2. 락 설계 개선 — gameStateMutex 분할
+================================================================================
+
+■ 수정 파일: GameServer/GameServer.h, GameServer/Handlers/GatewayGame/GatewayHandlers.cpp,
+             GameServer/Monster/MonsterManager.cpp, GameServer/Handlers/WorldGame/WorldHandlers.cpp
+
+  [문제]
+  단일 shared_mutex(gameStateMutex)로 playerMap, uidToAccount, monsterMap을 모두 보호.
+  몬스터 AI Tick이 shared_lock을 잡고 있는 동안 플레이어 이동 처리가 대기.
+  대규모 동접 시 이 단일 락이 심각한 병목이 됨.
+
+  [수정]
+  역할별 락 분리:
+    playerMutex_  (shared_mutex) — playerMap + uidToAccount 보호
+    monsterMutex_ (shared_mutex) — monsterMap + monsters 보호
+    uidCounter    (atomic<uint64_t>) — 락 불필요한 원자적 UID 발급
+
+  효과:
+    - 몬스터 AI Tick(monsterMutex_ 읽기)과 플레이어 이동(playerMutex_ 쓰기)이 독립 동작
+    - uidCounter의 atomic 변환으로 UID 발급 시 글로벌 쓰기 락 불필요
+    - 공격 처리 시 monsterMutex_(몬스터 검색)와 playerMutex_(유저 검색)를 순차적으로
+      최소 범위로만 획득하여 데드락 방지
+
+  [락 획득 순서 규칙]
+  데드락 방지를 위해 다음 순서를 전체 코드에서 일관되게 준수:
+    monsterMutex_(보유 중) → playerMutex_ 획득 (OK)
+    playerMutex_(보유 중) → monsterMutex_ 획득 (금지 — 이 순서는 사용하지 않음)
+
+================================================================================
+3. 패킷 처리 파이프라인 강화
+================================================================================
+
+■ 수정 파일: Common/PacketDispatcher.h, GatewayServer/Session/ClientSession.h,
+             GatewayServer/Session/ClientSession.cpp
+
+  [문제]
+  (1) 미등록 패킷 ID에 대해 로그만 출력하고 정상 처리를 계속함
+  (2) 클라이언트가 초당 수만 개의 패킷을 보내도 모두 처리 → DoS 취약점
+  (3) 악의적 패킷에 대한 방어 로직이 전무
+
+  [수정]
+  (1) PacketDispatcher에 HasHandler() 메서드 추가
+      → ReadHeader()에서 핸들러 등록 여부를 사전 검증
+      → 미등록 패킷은 페이로드를 읽고 드랍 (소켓 스트림 유지)
+
+  (2) PacketRateLimiter 클래스 추가 (윈도우 기반 카운터)
+      → 초당 200 패킷 제한 (MAX_PACKETS_PER_SECOND)
+      → 초과 시 패킷 드랍 + 경고 로그
+      → 5회 연속 초과(MAX_VIOLATIONS) 시 연결 강제 종료
+
+  (3) ClientSession::ReadHeader()에 3단계 검증 추가:
+      [1단계] 헤더 크기 검증 (기존) + 실패 시 즉시 연결 종료
+      [2단계] Rate Limiting 검증 → 초과 시 패킷 드랍
+      [3단계] 패킷 ID 유효성 검증 → 미등록 ID 드랍
+
+================================================================================
+4. Zone/AOI 시스템 개선
+================================================================================
+
+■ 수정 파일: GameServer/Zone/Zone.h, GameServer/Zone/Zone.cpp
+
+  [문제]
+  (1) 섹터 전환 시 Remove(old) → Add(new) 순서로 수행
+      → 두 연산 사이에 "어디에도 없는" 상태가 발생
+      → AOI 브로드캐스트에서 누락 가능
+
+  (2) GetPlayersInAOI()가 매번 빈 벡터를 생성하고 동적 확장
+      → 재할당이 반복되어 메모리 할당자 부하 증가
+
+  [수정]
+  (1) 원자적 섹터 전환: Add(new) → Remove(old) 순서로 변경
+      → 순간적으로 두 섹터에 동시 존재하지만 "누락"보다 안전
+      → AOI 관점에서 중복 수신은 클라이언트가 무시 가능 (idempotent)
+      → UpdatePosition, UpdatePositionMonster 모두 동일 패턴 적용
+
+  (2) 벡터 할당 최적화:
+      → Sector::GetPlayerCount() 추가하여 사전 인원수 조회
+      → GetPlayersInAOI()에서 AOI 범위 내 예상 인원으로 reserve() 호출
+      → 불필요한 재할당 횟수 대폭 감소
+
+  (3) 콜백 기반 AOI 조회 API 추가:
+      → ForEachPlayerInAOI(x, y, callback): 벡터 생성 없이 직접 순회
+      → ForEachMonsterInAOI(x, y, callback): 몬스터용 콜백 순회
+      → 기존 GetPlayersInAOI()도 하위 호환성 유지
+
+================================================================================
+5. 에러 복구 및 장애 대응 개선
+================================================================================
+
+■ 수정 파일: LoginServer/Network/WorldConnection.h, LoginServer/Network/WorldConnection.cpp,
+             GameServer/GameServer.cpp
+
+  [문제]
+  (1) LoginServer → WorldServer 연결이 동기(connect) 방식이며 재연결 미지원
+      → WorldServer 장애 시 LoginServer도 사실상 기능 상실
+      → WorldServer 재시작 후에도 LoginServer를 수동으로 재시작해야 함
+
+  (2) GameServer에서 DB 연결 실패 시 서버 즉시 종료
+      → 이동, 전투, AI 등 게임 로직은 DB 없이도 동작 가능한데
+         DB 하나의 장애로 서버 전체가 내려감
+
+  [수정]
+  (1) LoginServer WorldConnection: GatewayServer의 GameConnection과 동일한 패턴 적용
+      → 동기 connect → 비동기 async_connect로 전환
+      → ScheduleRetry(): 연결 실패 시 3초 후 재연결 시도
+      → ReadHeader/ReadPayload 에러 시 자동 ScheduleRetry() 호출
+      → 재연결 전 send_queue_ 초기화로 잔여 패킷 제거
+      → connected_ 플래그로 미연결 상태에서 Send() 시 패킷 드랍
+
+  (2) GameServer Degraded Mode:
+      → DB 연결 실패 시 경고 로그 출력 후 서버 계속 가동
+      → 게임 로직(이동, 전투, AI)은 DB 없이 정상 동작
+      → 계정/로그인 관련 기능만 제한됨
+
+================================================================================
+수정 파일 목록
+================================================================================
+[수정]
+  WorldServer/WorldServer.h                           — strand + send_queue 추가
+  WorldServer/WorldServer.cpp                         — Send() strand 패턴 적용 + DoWrite()
+  GameServer/GameServer.h                             — 락 분할 (playerMutex_, monsterMutex_, atomic uidCounter)
+  GameServer/GameServer.cpp                           — DB Degraded Mode 적용
+  GameServer/Handlers/GatewayGame/GatewayHandlers.cpp — playerMutex_ / monsterMutex_ 분리 적용
+  GameServer/Monster/MonsterManager.cpp               — playerMutex_ / monsterMutex_ 분리 적용
+  GameServer/Handlers/WorldGame/WorldHandlers.cpp     — monsterMutex_ 적용
+  Common/PacketDispatcher.h                           — HasHandler() + PacketRateLimiter 추가
+  GatewayServer/Session/ClientSession.h               — PacketRateLimiter 멤버 추가
+  GatewayServer/Session/ClientSession.cpp             — Rate Limiting + 패킷 ID 검증 적용
+  GameServer/Zone/Zone.h                              — ForEachPlayerInAOI, GetPlayerCount 추가
+  GameServer/Zone/Zone.cpp                            — 원자적 섹터 전환 + reserve 최적화
+  LoginServer/Network/WorldConnection.h               — 재연결 인프라 추가
+  LoginServer/Network/WorldConnection.cpp             — 비동기 연결 + ScheduleRetry 구현
+
+[신규]
+  ReleaseNotes/v1.0.7.txt                             — 이 파일

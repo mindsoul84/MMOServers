@@ -1,0 +1,14 @@
+﻿[v1.0.5 수정 요약]
+ㆍ게임 서버 Redis 연동 추가 : account_id와 hp 저장
+
+신규 파일 1개:
+Common/Redis/RedisManager.h — hiredis 기반 Redis 매니저. 기존 프로젝트의 DI 패턴(SetTestInstance)을 그대로 따릅니다. Redis HASH로 player:{account_id} 키에 account_id와 hp 필드를 저장합니다.
+
+수정 파일 3개:
+GatewayHandlers.cpp — 유저 최초 Zone 진입 시 SetPlayerOnline(), 퇴장 시 RemovePlayer() 호출 추가
+MonsterManager.cpp — 몬스터가 유저를 공격해 HP가 깎일 때와 사망 후 부활(HP 100 복구) 시 UpdatePlayerHp() 호출 추가
+GameServer.cpp (패치 스니펫) — main()에서 Config 로드 직후 RedisManager::GetInstance().Connect() 호출
+
+- 환경설정 수정
+Common/ConfigManager.h — Redis 멤버 변수/Getter/Setter 추가, LoadConfig()에서 redis_info 파싱, 로드 성공 로그에 Redis 상태 출력
+Common/config.json — redis_info 섹션 추가 (redis_conn, redis_host, redis_port)
