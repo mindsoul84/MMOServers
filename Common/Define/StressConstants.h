@@ -24,6 +24,7 @@ namespace StressConstants {
         constexpr int MAX_ACTION_DELAY_MS = 4000;       // 최대 행동 대기 시간 (밀리초)
         constexpr float MOVE_RANGE = 5.0f;              // 이동 범위 (-5 ~ +5)
         constexpr float SPAWN_RANGE = 1000.0f;          // 초기 스폰 좌표 범위
+        constexpr int MAX_TARGET_CONNECTION = 3000;     // 최대 연결 수
     }
 
     // ---------------------------------------------------------

@@ -5,11 +5,6 @@
 #include <boost/property_tree/json_parser.hpp>
 
 // ==========================================
-//   싱글톤 남용 개선: 의존성 주입(DI) 지원
-//
-// 변경 전: private 생성자 + static Get() → 테스트 불가, 의존성 주입 불가능
-// 변경 후: public 생성자 + SetTestInstance() → 테스트에서 목(mock) 인스턴스 주입 가능
-//
 // [테스트 코드 사용 예]
 //   ConfigManager testCfg;
 //   testCfg.SetGameServerPort(12345);
@@ -76,13 +71,13 @@ public:
             boost::property_tree::read_json(filePath, pt);
 
             db_conn_     = pt.get<bool>("db_conn", false);
-            server_name_ = pt.get<std::string>("MSSQL_INFO.ServerName", ".\\SQLEXPRESS");
-            database_    = pt.get<std::string>("MSSQL_INFO.Database", "game_db");
+            server_name_ = pt.get<std::string>("MSSQL_INFO.ServerName");
+            database_    = pt.get<std::string>("MSSQL_INFO.Database");
 
             //   Redis 설정 로드
             redis_conn_ = pt.get<bool>("redis_info.redis_conn", false);
-            redis_host_ = pt.get<std::string>("redis_info.redis_host", "127.0.0.1");
-            redis_port_ = pt.get<int>("redis_info.redis_port", 6379);
+            redis_host_ = pt.get<std::string>("redis_info.redis_host");
+            redis_port_ = pt.get<int>("redis_info.redis_port");
 
             dummy_client_login_port_ = pt.get<short>("dummy_client_info.login_server_port");
 

@@ -5,6 +5,7 @@
 #include <windows.h>
 #include "../StressTestTool/Manager/StressManager.h"
 #include "../Common/ConfigManager.h"
+#include "../Common/Define/StressConstants.h"
 
 int main() {
     SetConsoleOutputCP(CP_UTF8);
@@ -39,6 +40,9 @@ int main() {
     // ==========================================
 
     boost::asio::io_context io_context;
+    
+    if (TARGET_CONNECTIONS > StressConstants::BotAI::MAX_TARGET_CONNECTION)
+        TARGET_CONNECTIONS = StressConstants::BotAI::MAX_TARGET_CONNECTION;
 
     StressManager manager(io_context, TARGET_CONNECTIONS, SPAWN_RATE);
     manager.StartStressTest();
